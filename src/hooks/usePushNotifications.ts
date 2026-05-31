@@ -33,14 +33,17 @@ export function usePushNotifications(user: User | null) {
       const token = await getToken(messaging, {
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: swReg,
+      }).catch(err => {
+        alert("Erro getToken: " + err.message);
+        return null;
       });
 
       if (!token) {
+        alert("Falha: Token gerado foi nulo.");
         console.warn("[FCM] getToken retornou nulo.");
         return;
       }
-      console.log("[FCM] Token gerado com sucesso!");
-
+      
       // 3. Salva o token chamando a nossa API serverless (bypassa regras do Firestore client)
       try {
         const platformStr = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? "mobile" : "desktop";
@@ -56,11 +59,15 @@ export function usePushNotifications(user: User | null) {
         });
         
         if (response.ok) {
+          alert("Sucesso! Token salvo no banco via API.");
           console.log("[FCM] Token salvo no banco com sucesso via API!");
         } else {
-          console.error("[FCM] API falhou ao salvar token:", await response.text());
+          const errText = await response.text();
+          alert("Erro na API ao salvar token: " + errText);
+          console.error("[FCM] API falhou ao salvar token:", errText);
         }
-      } catch (apiErr) {
+      } catch (apiErr: any) {
+        alert("Erro de rede ao salvar token: " + apiErr.message);
         console.error("[FCM] Erro na requisição para /api/register-device:", apiErr);
       }
 
