@@ -21,9 +21,11 @@ export function usePushNotifications(user: User | null) {
     if (Notification.permission !== "granted") return;
 
     try {
-      // 1. Aguarda o Service Worker do Vite PWA (que já inclui o Firebase Messaging)
-      // NÃO registrar manualmente: dois SWs no mesmo escopo "/" quebra o iOS.
-      const swReg = await navigator.serviceWorker.ready;
+      // 1. Registra o service worker do Firebase Messaging
+      const swReg = await navigator.serviceWorker.register(
+        "/firebase-messaging-sw.js",
+        { scope: "/" }
+      );
 
       const messaging = getFirebaseMessaging();
       if (!messaging) return;

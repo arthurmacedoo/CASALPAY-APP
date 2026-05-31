@@ -6,14 +6,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // injectManifest: usa nosso SW customizado (src/sw.ts) que combina
-      // Workbox + Firebase Messaging em um único arquivo.
-      // Isso evita o conflito de dois SWs no escopo "/" que quebrava o iOS.
-      strategies: "injectManifest",
-      srcDir: "src",
-      filename: "sw.ts",
       registerType: "autoUpdate",
-      injectRegister: "auto",
       includeAssets: ["favicon.ico", "apple-touch-icon.png"],
       manifest: {
         name: "CasalPay",
@@ -45,7 +38,7 @@ export default defineConfig({
           },
         ],
       },
-      injectManifest: {
+      workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg}"],
       },
     }),
