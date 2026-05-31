@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import type { Transaction, ExpenseTransaction, SettlementTransaction } from "../types";
 import { formatBRL, formatDateBR, formatSplitType } from "../lib/formatters";
 import { calculateExpenseDebt, calculateSettlementEffect } from "../lib/calculations";
+import { OWNER_NAME, PARTNER_NAME, OWNER_EMOJI, PARTNER_EMOJI } from "../constants/couple";
 
 interface TransactionItemProps {
   transaction: Transaction;
@@ -36,7 +37,7 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-lg">
-              {isExpense ? (transaction.paidBy === "Arthur" ? "👨" : "👩") : "💸"}
+              {isExpense ? (transaction.paidBy === OWNER_NAME ? OWNER_EMOJI : PARTNER_EMOJI) : "💸"}
             </span>
             <p className="text-base font-semibold text-text-primary truncate">
               {transaction.description || (isExpense ? "Compra" : "Pix de Acerto")}
@@ -94,14 +95,14 @@ const ExpenseDetails: React.FC<{ transaction: ExpenseTransaction }> = ({ transac
   const isNobodyOwes = debt === 0;
   const zaraOwes = debt > 0;
 
-  const paidByColor = transaction.paidBy === "Arthur" ? "text-accent-blue" : "text-accent-pink";
+  const paidByColor = transaction.paidBy === OWNER_NAME ? "text-accent-blue" : "text-accent-pink";
   const debtColor = isNobodyOwes ? "text-text-muted" : zaraOwes ? "text-accent-pink" : "text-accent-blue";
   
   const debtText = isNobodyOwes
     ? "Sem dívida"
     : zaraOwes
-    ? `Zara deve ${formatBRL(debt)}`
-    : `Arthur deve ${formatBRL(Math.abs(debt))}`;
+    ? `${PARTNER_NAME} deve ${formatBRL(debt)}`
+    : `${OWNER_NAME} deve ${formatBRL(Math.abs(debt))}`;
 
   return (
     <>
@@ -121,7 +122,7 @@ const SettlementDetails: React.FC<{ transaction: SettlementTransaction }> = ({ t
   // effect positivo = reduz dívida da Zara
   // effect negativo = reduz dívida do Arthur
   
-  const fromColor = transaction.from === "Arthur" ? "text-accent-blue" : "text-accent-pink";
+  const fromColor = transaction.from === OWNER_NAME ? "text-accent-blue" : "text-accent-pink";
   const effectText = effect > 0 
     ? `Reduziu dívida dela` 
     : `Reduziu dívida dele`;

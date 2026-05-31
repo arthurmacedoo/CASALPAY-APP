@@ -12,6 +12,7 @@ import { parseToCents, getMonthKey } from "../lib/calculations";
 import { getTodayDateString, getCurrentMonthKey } from "../lib/formatters";
 import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
+import { OWNER_NAME, PARTNER_NAME, OWNER_EMOJI, PARTNER_EMOJI } from "../constants/couple";
 
 const initialExpenseData: ExpenseFormData = {
   type: "expense",
@@ -215,17 +216,17 @@ export const AddExpensePage: React.FC = () => {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setForm((f) => f.type === "expense" ? { ...f, paidBy: "Arthur" } : f)}
-                  className={`chip ${form.paidBy === "Arthur" ? "chip-selected-blue" : ""}`}
+                  onClick={() => setForm((f) => f.type === "expense" ? { ...f, paidBy: OWNER_NAME } : f)}
+                  className={`chip ${form.paidBy === OWNER_NAME ? "chip-selected-blue" : ""}`}
                 >
-                  👨 Arthur
+                  {OWNER_EMOJI} {OWNER_NAME}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setForm((f) => f.type === "expense" ? { ...f, paidBy: "Zara" } : f)}
-                  className={`chip ${form.paidBy === "Zara" ? "chip-selected-pink" : ""}`}
+                  onClick={() => setForm((f) => f.type === "expense" ? { ...f, paidBy: PARTNER_NAME } : f)}
+                  className={`chip ${form.paidBy === PARTNER_NAME ? "chip-selected-pink" : ""}`}
                 >
-                  💁‍♀️ Zara
+                  {PARTNER_EMOJI} {PARTNER_NAME}
                 </button>
               </div>
             </div>
@@ -239,8 +240,8 @@ export const AddExpensePage: React.FC = () => {
                 {(["50/50", "100% Arthur", "100% Zara"] as SplitType[]).map((type) => {
                   const labels: Record<SplitType, string> = {
                     "50/50": "⚖️ Meio a Meio",
-                    "100% Arthur": "👤 Só Arthur",
-                    "100% Zara": "💁‍♀️ Só Zara",
+                    "100% Arthur": `${OWNER_EMOJI} Só ${OWNER_NAME}`,
+                    "100% Zara": `${PARTNER_EMOJI} Só ${PARTNER_NAME}`,
                   };
                   const isSelected = form.splitType === type;
                   const colorClass =
@@ -274,17 +275,17 @@ export const AddExpensePage: React.FC = () => {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setForm((f) => f.type === "settlement" ? { ...f, from: "Arthur", to: "Zara" } : f)}
-                  className={`chip ${form.from === "Arthur" ? "chip-selected-blue" : ""}`}
+                  onClick={() => setForm((f) => f.type === "settlement" ? { ...f, from: OWNER_NAME, to: PARTNER_NAME } : f)}
+                  className={`chip ${form.from === OWNER_NAME ? "chip-selected-blue" : ""}`}
                 >
-                  👨 Arthur
+                  {OWNER_EMOJI} {OWNER_NAME}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setForm((f) => f.type === "settlement" ? { ...f, from: "Zara", to: "Arthur" } : f)}
-                  className={`chip ${form.from === "Zara" ? "chip-selected-pink" : ""}`}
+                  onClick={() => setForm((f) => f.type === "settlement" ? { ...f, from: PARTNER_NAME, to: OWNER_NAME } : f)}
+                  className={`chip ${form.from === PARTNER_NAME ? "chip-selected-pink" : ""}`}
                 >
-                  💁‍♀️ Zara
+                  {PARTNER_EMOJI} {PARTNER_NAME}
                 </button>
               </div>
             </div>

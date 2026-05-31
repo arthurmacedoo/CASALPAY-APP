@@ -5,6 +5,7 @@ import { calculateBalance, generatePixSummary } from "../lib/calculations";
 import { getCurrentMonthKey, formatMonthLabel } from "../lib/formatters";
 import { BalanceCard } from "../components/BalanceCard";
 import { TransactionItem } from "../components/TransactionItem";
+import { AnniversaryCountdown } from "../components/AnniversaryCountdown";
 import { Button } from "../components/ui/Button";
 
 export const HomePage: React.FC = () => {
@@ -145,6 +146,9 @@ export const HomePage: React.FC = () => {
             + Adicionar despesa
           </Button>
         )}
+
+        {/* Contagem Regressiva para 1 ano de namoro */}
+        <AnniversaryCountdown />
       </div>
     </main>
   );
