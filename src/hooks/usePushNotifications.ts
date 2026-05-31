@@ -1,96 +1,114 @@
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { getToken, onMessage } from "firebase/messaging";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { db, COUPLE_ID, getFirebaseMessaging } from "../lib/firebase";
+import { getFirebaseMessaging } from "../lib/firebase";
 import type { User } from "firebase/auth";
 
 // Chave VAPID gerada no Firebase Console → Project Settings → Cloud Messaging
 const VAPID_KEY =
   "BFmyiHlDxClXadDlgDj-87L_stYeIEBhnvuDRQlPkXyC1wnntnUFhxNue7C_diTDsi-vlQCWQ96gNDCN-vmyVOM";
 
-export function usePushNotifications(user: User | null): void {
-  useEffect(() => {
-    // Sai sem fazer nada se não houver usuário logado
+export function usePushNotifications(user: User | null) {
+  const [permission, setPermission] = useState<NotificationPermission>(
+    "Notification" in window ? Notification.permission : "denied"
+  );
+
+  const setupPush = useCallback(async () => {
     if (!user) return;
-    // Sai se o browser não suportar notificações
     if (!("Notification" in window)) return;
     if (!("serviceWorker" in navigator)) return;
 
-    let cancelled = false;
+    if (Notification.permission !== "granted") return;
 
-    const setup = async () => {
+    try {
+      // 1. Registra o service worker do FCM
+      const swReg = await navigator.serviceWorker.register(
+        "/firebase-messaging-sw.js",
+        { scope: "/" }
+      );
+
+      const messaging = getFirebaseMessaging();
+      if (!messaging) return;
+
+      // 2. Obtém o token FCM do dispositivo atual
+      const token = await getToken(messaging, {
+        vapidKey: VAPID_KEY,
+        serviceWorkerRegistration: swReg,
+      });
+
+      if (!token) {
+        console.warn("[FCM] getToken retornou nulo.");
+        return;
+      }
+      console.log("[FCM] Token gerado com sucesso!");
+
+      // 3. Salva o token chamando a nossa API serverless (bypassa regras do Firestore client)
       try {
-        // 1. Solicita permissão de notificação (só pergunta uma vez ao usuário)
-        let permission = Notification.permission;
-        if (permission === "default") {
-          permission = await Notification.requestPermission();
-        }
-        if (permission !== "granted" || cancelled) return;
-
-        // 2. Registra o service worker do FCM
-        const swReg = await navigator.serviceWorker.register(
-          "/firebase-messaging-sw.js",
-          { scope: "/" }
-        );
-
-        const messaging = getFirebaseMessaging();
-        if (!messaging || cancelled) return;
-
-        // 3. Obtém o token FCM do dispositivo atual
-        const token = await getToken(messaging, {
-          vapidKey: VAPID_KEY,
-          serviceWorkerRegistration: swReg,
-        });
-
-        if (!token || cancelled) return;
-
-        // 4. Salva o token no Firestore, associado ao UID do usuário logado
-        await setDoc(
-          doc(db, "couples", COUPLE_ID, "fcm_tokens", user.uid),
-          {
+        const platformStr = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? "mobile" : "desktop";
+        const response = await fetch("/api/register-device", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
             token,
             email: user.email,
             uid: user.uid,
-            updatedAt: serverTimestamp(),
-            platform: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-              ? "mobile"
-              : "desktop",
-          },
-          { merge: true }
-        );
-
-        // 5. Exibe notificações quando o app estiver em FOREGROUND (aberto na tela)
-        const unsubscribe = onMessage(messaging, (payload) => {
-          const { title, body } = payload.notification ?? {};
-          if (!title) return;
-          // Usa a Notifications API nativamente
-          if (Notification.permission === "granted") {
-            new Notification(title, {
-              body: body ?? "",
-              icon: "/icon-192.png",
-              badge: "/icon-192.png",
-              tag: "casalpay-love",
-            });
-          }
+            platform: platformStr
+          }),
         });
-
-        // Limpa o listener quando o componente desmontar
-        return unsubscribe;
-      } catch (err) {
-        if (!cancelled) {
-          console.warn("[FCM] Falha ao registrar push notifications:", err);
+        
+        if (response.ok) {
+          console.log("[FCM] Token salvo no banco com sucesso via API!");
+        } else {
+          console.error("[FCM] API falhou ao salvar token:", await response.text());
         }
+      } catch (apiErr) {
+        console.error("[FCM] Erro na requisição para /api/register-device:", apiErr);
       }
-    };
 
-    let cleanup: (() => void) | undefined;
-    setup().then((fn) => {
-      if (fn) cleanup = fn;
-    });
+      // 4. Exibe notificações quando o app estiver em FOREGROUND (aberto na tela)
+      const unsubscribe = onMessage(messaging, (payload) => {
+        const { title, body } = payload.notification ?? {};
+        if (!title) return;
+        // Usa a Notifications API nativamente
+        if (Notification.permission === "granted") {
+          new Notification(title, {
+            body: body ?? "",
+            icon: "/icon-192.png",
+            badge: "/icon-192.png",
+            tag: "casalpay-love",
+          });
+        }
+      });
 
-    return () => {
-      cancelled = true;
-      cleanup?.();
-    };
+      return unsubscribe;
+    } catch (err) {
+      console.warn("[FCM] Falha ao configurar push notifications:", err);
+    }
   }, [user]);
+
+  const requestPermission = async () => {
+    if (!("Notification" in window)) return;
+    try {
+      const perm = await Notification.requestPermission();
+      setPermission(perm);
+      if (perm === "granted") {
+        setupPush();
+      }
+    } catch (err) {
+      console.error("Erro ao solicitar permissão", err);
+    }
+  };
+
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    if (permission === "granted") {
+      setupPush().then((unsub) => {
+        if (unsub) unsubscribe = unsub;
+      });
+    }
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [permission, setupPush]);
+
+  return { permission, requestPermission };
 }

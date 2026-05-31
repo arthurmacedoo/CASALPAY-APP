@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useAuth } from "../hooks/useAuth";
+import { useNotificationContext } from "../contexts/NotificationContext";
 import {
   OWNER_NAME,
   PARTNER_NAME,
@@ -34,6 +35,8 @@ const COLOR_MAP = {
 // ─── Componente principal ──────────────────────────────────────────────────
 export const MessagesPage: React.FC = () => {
   const { user } = useAuth();
+  const { permission, requestPermission } = useNotificationContext();
+  
   const [sending, setSending] = useState<string | null>(null);
   const [sent, setSent]       = useState<string | null>(null);
   const [error, setError]     = useState<string | null>(null);
@@ -92,8 +95,40 @@ export const MessagesPage: React.FC = () => {
         </p>
       </div>
 
+      {/* ── Alerta de Permissão de Notificação ──────────────────────────────── */}
+      {permission !== "granted" && (
+        <div className="px-5 mt-3 animate-fade-in-up">
+          <div className="card border border-accent-blue/30 bg-accent-blue/10 flex flex-col gap-3">
+            <div className="flex items-start gap-3">
+              <span className="text-xl">🔔</span>
+              <div>
+                <p className="text-sm font-semibold text-text-primary">Ativar Notificações</p>
+                <p className="text-xs text-text-muted mt-0.5 leading-relaxed">
+                  Para receber e enviar mensagens em tempo real, precisamos da sua permissão.
+                </p>
+              </div>
+            </div>
+            
+            {permission === "default" && (
+              <button
+                onClick={requestPermission}
+                className="w-full py-2.5 rounded-xl bg-accent-blue text-white text-sm font-semibold active:scale-95 transition-transform"
+              >
+                Ativar Notificações
+              </button>
+            )}
+
+            {permission === "denied" && (
+              <p className="text-xs text-accent-red font-medium">
+                Notificações bloqueadas. Acesse os Ajustes do seu celular, encontre o app na lista e ative as notificações.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Card "De → Para" ──────────────────────────────────────────────── */}
-      <div className="px-5 mt-4 animate-fade-in-up">
+      <div className="px-5 mt-5 animate-fade-in-up">
         <div className="card border border-border flex items-center gap-4">
           {/* Remetente */}
           <div className="flex flex-col items-center gap-1 min-w-[56px]">
@@ -133,7 +168,7 @@ export const MessagesPage: React.FC = () => {
       </div>
 
       {/* ── Grid de mensagens ─────────────────────────────────────────────── */}
-      <div className="px-5 mt-5 grid grid-cols-2 gap-3 animate-fade-in-up">
+      <div className="px-5 mt-5 grid grid-cols-2 gap-3 animate-fade-in-up" style={{ animationDelay: "100ms" }}>
         {LOVE_MESSAGES.map((msg) => {
           const isSending = sending === msg.id;
           const isSent    = sent    === msg.id;
@@ -193,7 +228,7 @@ export const MessagesPage: React.FC = () => {
       )}
 
       {/* ── Aviso de iOS ──────────────────────────────────────────────────── */}
-      <div className="mx-5 mt-6 animate-fade-in-up">
+      <div className="mx-5 mt-6 animate-fade-in-up" style={{ animationDelay: "200ms" }}>
         <div className="card border border-border bg-bg-elevated/40">
           <p className="text-[11px] text-text-muted text-center leading-relaxed">
             🔔 A notificação chega no celular de{" "}
@@ -201,7 +236,7 @@ export const MessagesPage: React.FC = () => {
             mesmo com o app fechado.
             <br />
             <span className="text-text-muted/70">
-              (Requer iOS 16.4+ para funcionar no iPhone)
+              (No iPhone, adicione o app à Tela de Início primeiro)
             </span>
           </p>
         </div>

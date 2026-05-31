@@ -1,16 +1,18 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import * as admin from "firebase-admin";
+import { getApps, initializeApp, cert } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+import { getMessaging } from "firebase-admin/messaging";
 
 // ── Inicializa Firebase Admin SDK (singleton) ────────────────────────────────
-if (!admin.apps.length) {
+if (!getApps().length) {
   const privateKey = (process.env.FIREBASE_PRIVATE_KEY ?? "")
     .replace(/\\n/g, "\n"); // env vars escapam \n — precisa reverter
 
   if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !privateKey) {
     console.error("[FCM] Variáveis de ambiente do Firebase Admin SDK não configuradas.");
   } else {
-    admin.initializeApp({
-      credential: admin.credential.cert({
+    initializeApp({
+      credential: cert({
         projectId:   process.env.FIREBASE_PROJECT_ID,
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
         privateKey,
@@ -32,7 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Valida se o Admin SDK foi inicializado
-  if (!admin.apps.length) {
+  if (!getApps().length) {
     return res.status(500).json({
       error:
         "Configuração do servidor incompleta. Configure as variáveis FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL e FIREBASE_PRIVATE_KEY na Vercel.",
@@ -48,7 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const COUPLE_ID = process.env.VITE_COUPLE_ID ?? "arthur-namorada-2026";
 
   try {
-    const db = admin.firestore();
+    const db = getFirestore();
 
     // Busca todos os tokens FCM registrados do casal
     const tokensSnap = await db
@@ -81,9 +83,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Dispara as notificações — uma por token (suporta múltiplos dispositivos)
+    const messaging = getMessaging();
     const results = await Promise.allSettled(
       tokensToNotify.map((token) =>
-        admin.messaging().send({
+        messaging.send({
           token,
           notification: {
             title: title ?? "CasalPay 💞",

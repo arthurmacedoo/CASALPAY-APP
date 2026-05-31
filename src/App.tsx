@@ -7,7 +7,7 @@ import { AddExpensePage } from "./pages/AddExpense";
 import { HistoryPage } from "./pages/History";
 import { MessagesPage } from "./pages/Messages";
 import { LoginPage } from "./pages/Login";
-import { usePushNotifications } from "./hooks/usePushNotifications";
+import { NotificationProvider } from "./contexts/NotificationContext";
 
 const LoadingScreen: React.FC = () => (
   <div className="flex flex-col items-center justify-center min-h-screen gap-6">
@@ -38,22 +38,20 @@ const ErrorScreen: React.FC<{ message: string }> = ({ message }) => (
 
 // Componente interno que só monta quando autenticado — hook pode ser chamado sem violar regras
 const AuthenticatedApp: React.FC = () => {
-  const { user } = useAuth();
-  // Hook sempre chamado na mesma ordem, dentro de componente autenticado
-  usePushNotifications(user);
-
   return (
-    <BrowserRouter>
-      <div className="flex flex-col min-h-screen min-h-dvh safe-top">
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/add" element={<AddExpensePage />} />
-          <Route path="/history" element={<HistoryPage />} />
-          <Route path="/messages" element={<MessagesPage />} />
-        </Routes>
-        <BottomNav />
-      </div>
-    </BrowserRouter>
+    <NotificationProvider>
+      <BrowserRouter>
+        <div className="flex flex-col min-h-screen min-h-dvh safe-top">
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/add" element={<AddExpensePage />} />
+            <Route path="/history" element={<HistoryPage />} />
+            <Route path="/messages" element={<MessagesPage />} />
+          </Routes>
+          <BottomNav />
+        </div>
+      </BrowserRouter>
+    </NotificationProvider>
   );
 };
 

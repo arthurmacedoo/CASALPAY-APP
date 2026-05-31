@@ -70,43 +70,48 @@ export const BottomNav: React.FC = () => {
     },
   ];
 
-  return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-bg-card border-t border-border safe-bottom">
-      <div className="flex items-center justify-around px-2 pt-2 pb-2">
-        {navItems.map((item) => {
-          const isActive =
-            item.to === "/"
-              ? location.pathname === "/"
-              : location.pathname.startsWith(item.to);
+  const activeIndex = navItems.findIndex((item) =>
+    item.to === "/"
+      ? location.pathname === "/"
+      : location.pathname.startsWith(item.to)
+  );
 
-          const isAddButton = item.to === "/add";
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-bg-card border-t border-border safe-bottom px-2">
+      <div className="relative flex items-center w-full pt-2 pb-2">
+        {/* Sliding Indicator */}
+        {activeIndex !== -1 && (
+          <div
+            className="absolute top-2 bottom-2 transition-transform duration-300 z-0"
+            style={{
+              width: `${100 / navItems.length}%`,
+              transform: `translateX(${activeIndex * 100}%)`,
+              left: 0,
+              transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
+            }}
+          >
+            <div className="mx-1 h-full bg-accent-pink rounded-2xl shadow-[0_0_15px_rgba(232,121,160,0.3)]" />
+          </div>
+        )}
+
+        {navItems.map((item, index) => {
+          const isActive = index === activeIndex;
 
           return (
             <NavLink
               key={item.to}
               to={item.to}
               id={`nav-${item.to.replace("/", "") || "home"}`}
-              className="flex-1"
+              className="flex-1 relative z-10"
+              aria-current={isActive ? "page" : undefined}
             >
               <div
-                className={`flex flex-col items-center gap-1 py-1 transition-all duration-200 ${
-                  isAddButton
-                    ? `mx-2 py-2.5 rounded-2xl ${
-                        isActive
-                          ? "bg-accent-pink text-white shadow-glow"
-                          : "bg-accent-pink text-white shadow-glow"
-                      }`
-                    : isActive
-                    ? "text-accent-pink"
-                    : "text-text-muted"
+                className={`flex flex-col items-center gap-1 py-1.5 transition-colors duration-200 ${
+                  isActive ? "text-white" : "text-text-muted hover:text-text-secondary"
                 }`}
               >
-                {isActive && !isAddButton ? item.activeIcon : item.icon}
-                <span
-                  className={`text-[10px] font-medium ${
-                    isAddButton ? "text-white" : ""
-                  }`}
-                >
+                {isActive ? item.activeIcon : item.icon}
+                <span className="text-[10px] font-medium tracking-wide">
                   {item.label}
                 </span>
               </div>

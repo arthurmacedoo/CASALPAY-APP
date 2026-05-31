@@ -10,7 +10,7 @@ firebase.initializeApp({
   authDomain: "casalpay.firebaseapp.com",
   projectId: "casalpay",
   storageBucket: "casalpay.firebasestorage.app",
-  messagingSenderId: "59050701036",
+  messagingSenderId: "590507010136",
   appId: "1:590507010136:web:61e8d93e39bc0c6244422d",
 });
 
