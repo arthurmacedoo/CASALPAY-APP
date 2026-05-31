@@ -75,13 +75,16 @@ export function usePushNotifications(user: User | null) {
       const unsubscribe = onMessage(messaging, (payload) => {
         const { title, body } = payload.notification ?? {};
         if (!title) return;
-        // Usa a Notifications API nativamente
+        // Usa a API via Service Worker (Obrigatório no iOS Safari)
         if (Notification.permission === "granted") {
-          new Notification(title, {
-            body: body ?? "",
-            icon: "/icon-192.png",
-            badge: "/icon-192.png",
-            tag: "casalpay-love",
+          navigator.serviceWorker.ready.then((reg) => {
+            reg.showNotification(title, {
+              body: body ?? "",
+              icon: "/icon-192.png",
+              badge: "/icon-192.png",
+              tag: "casalpay-love",
+              vibrate: [200, 100, 200],
+            });
           });
         }
       });

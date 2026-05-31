@@ -116,6 +116,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           },
           webpush: {
             notification: {
+              title: title ?? "CasalPay 💞",
+              body: message,
               icon: "/icon-192.png",
               badge: "/icon-192.png",
               tag: "casalpay-love",
