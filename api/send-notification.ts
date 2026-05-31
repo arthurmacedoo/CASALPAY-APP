@@ -85,27 +85,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Dispara as notificações — uma por token (suporta múltiplos dispositivos)
+    // Dispara as notificações — estratégia data-only para iOS PWA
+    // MOTIVO: payload com "notification" na raiz faz o Firebase SDK ignorar o
+    // onBackgroundMessage e tentar exibir automaticamente — o que NÃO funciona no iOS Safari PWA.
+    // Com apenas "data", o SW recebe o push via onBackgroundMessage e chama showNotification manualmente.
     const messaging = getMessaging();
     const results = await Promise.allSettled(
       tokensToNotify.map((token) =>
         messaging.send({
           token,
-          // Raiz notification: necessário para todos os canais
-          notification: {
-            title: title ?? "CasalPay 💞",
-            body: message,
-          },
-          // Webpush limpo: essencial para iOS PWA / Safari Web Push
+          // APENAS webpush com data — sem "notification" na raiz
           webpush: {
-            notification: {
-              icon: "/icon-192.png",
-              badge: "/icon-192.png",
-              tag: "casalpay-love",
-              renotify: true,
+            data: {
+              title: title ?? "CasalPay 💞",
+              body: message,
             },
             headers: {
               Urgency: "high",
+              TTL: "60",
             },
           },
         })
