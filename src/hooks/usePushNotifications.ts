@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { getToken, onMessage } from "firebase/messaging";
 import { getFirebaseMessaging } from "../lib/firebase";
 import type { User } from "firebase/auth";
+import toast from "react-hot-toast";
 
 // A chave VAPID agora é injetada via Vercel Environment Variables
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
@@ -75,7 +76,14 @@ export function usePushNotifications(user: User | null) {
       const unsubscribe = onMessage(messaging, (payload) => {
         const { title, body } = payload.notification ?? {};
         if (!title) return;
-        // Usa a API via Service Worker (Obrigatório no iOS Safari)
+        
+        // Exibe um Toast in-app visual garantido (Fallback para quando o app está aberto)
+        toast(`${title}\n${body ?? ""}`, {
+          icon: '💌',
+          duration: 5000,
+        });
+
+        // Tenta usar a API via Service Worker (Obrigatório no iOS Safari)
         if (Notification.permission === "granted") {
           navigator.serviceWorker.ready.then((reg) => {
             reg.showNotification(title, {

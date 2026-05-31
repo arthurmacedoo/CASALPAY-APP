@@ -103,17 +103,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               priority: "high",
             },
           },
-          apns: {
-            payload: {
-              aps: {
-                sound: "default",
-                badge: 1,
-              },
-            },
-            headers: {
-              "apns-priority": "10",
-            },
-          },
           webpush: {
             notification: {
               title: title ?? "CasalPay 💞",
