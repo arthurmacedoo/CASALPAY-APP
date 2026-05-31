@@ -3,9 +3,8 @@ import { getToken, onMessage } from "firebase/messaging";
 import { getFirebaseMessaging } from "../lib/firebase";
 import type { User } from "firebase/auth";
 
-// Chave VAPID gerada no Firebase Console → Project Settings → Cloud Messaging
-const VAPID_KEY =
-  "BFmyiHlDxClXadDlgDj-87L_stYeIEBhnvuDRQlPkXyC1wnntnUFhxNue7C_diTDsi-vlQCWQ96gNDCN-vmyVOM";
+// A chave VAPID agora é injetada via Vercel Environment Variables
+const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 
 export function usePushNotifications(user: User | null) {
   const [permission, setPermission] = useState<NotificationPermission>(
@@ -30,6 +29,11 @@ export function usePushNotifications(user: User | null) {
       if (!messaging) return;
 
       // 2. Obtém o token FCM do dispositivo atual
+      if (!VAPID_KEY) {
+        alert("⚠️ VAPID_KEY ausente! Por favor, configure VITE_FIREBASE_VAPID_KEY no painel da Vercel.");
+        return;
+      }
+
       const token = await getToken(messaging, {
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: swReg,
