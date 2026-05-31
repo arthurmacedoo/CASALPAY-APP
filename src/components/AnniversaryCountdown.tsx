@@ -1,13 +1,6 @@
 import React, { useEffect, useState } from "react";
 
-// Helper function
-function getDaysUntil(targetDate: Date): number {
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const target = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
-  const diff = target.getTime() - startOfToday.getTime();
-  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
-}
+
 
 export const AnniversaryCountdown: React.FC = () => {
   const [daysLeft, setDaysLeft] = useState<number | null>(null);
@@ -15,22 +8,22 @@ export const AnniversaryCountdown: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    // 26 de novembro de 2027 (mês 10 em JS)
-    const targetDate = new Date(2027, 10, 26, 0, 0, 0);
+    // 26 de novembro de 2027 — 1 ano de namoro (mês 10 em JS = novembro)
+    const targetDate = new Date(2027, 10, 26);
 
     const updateCountdown = () => {
-      const days = getDaysUntil(targetDate);
-      if (days <= 0) {
-        setIsPassed(true);
-        setDaysLeft(0);
-      } else {
-        setIsPassed(false);
-        setDaysLeft(days);
-      }
+      const now = new Date();
+      const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const targetMidnight = new Date(2027, 10, 26);
+      const diffMs = targetMidnight.getTime() - todayMidnight.getTime();
+      const days = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+      setIsPassed(days === 0);
+      setDaysLeft(days);
     };
 
     updateCountdown();
-    const interval = setInterval(updateCountdown, 1000 * 60 * 60);
+    // Atualiza a cada minuto — garante que o número cai logo após meia-noite
+    const interval = setInterval(updateCountdown, 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
