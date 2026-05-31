@@ -33,18 +33,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: "Método não permitido" });
   }
 
-  // Valida se o Admin SDK foi inicializado
   if (!getApps().length) {
     return res.status(500).json({
-      error:
-        "Configuração do servidor incompleta. Configure as variáveis FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL e FIREBASE_PRIVATE_KEY na Vercel.",
+      error: "Configuração do servidor incompleta. Configure as variáveis FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL e FIREBASE_PRIVATE_KEY na Vercel.",
     });
   }
 
-  const { senderEmail, message, title } = req.body ?? {};
+  // "target" é o nome do DESTINATÁRIO: "Arthur" ou "Zara"
+  const { target, title, message } = req.body ?? {};
 
-  if (!senderEmail || !message) {
-    return res.status(400).json({ error: "senderEmail e message são obrigatórios." });
+  if (!target || !message) {
+    return res.status(400).json({ error: "target e message são obrigatórios." });
   }
 
   const COUPLE_ID = process.env.VITE_COUPLE_ID ?? "arthur-namorada-2026";
@@ -52,72 +51,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const db = getFirestore();
 
-    // Busca todos os tokens FCM registrados do casal
-    const tokensSnap = await db
+    // Busca DIRETAMENTE o documento do destinatário pelo nome (ex: doc "Zara")
+    const tokenDoc = await db
       .collection("couples")
       .doc(COUPLE_ID)
       .collection("fcm_tokens")
+      .doc(target)
       .get();
 
-    if (tokensSnap.empty) {
+    if (!tokenDoc.exists) {
       return res.status(404).json({
-        error:
-          "Nenhum dispositivo registrado ainda. Os dois precisam abrir o app e aceitar as notificações.",
+        error: `${target} ainda não abriu o app ou não aceitou as notificações.`,
       });
     }
 
-    // Filtra: envia apenas para o DESTINATÁRIO (não para quem clicou)
-    const tokensToNotify: string[] = [];
-    tokensSnap.forEach((snap) => {
-      const data = snap.data();
-      const dbEmail = (data.email || "").toLowerCase();
-      const sendEmail = senderEmail.toLowerCase();
+    const tokenData = tokenDoc.data();
+    const fcmToken  = tokenData?.token;
 
-      if (dbEmail !== sendEmail && typeof data.token === "string" && data.token.length > 0) {
-        tokensToNotify.push(data.token);
-      }
+    if (!fcmToken || typeof fcmToken !== "string" || fcmToken.length === 0) {
+      return res.status(404).json({
+        error: `Token FCM de ${target} está vazio ou inválido. Peça para ${target} abrir o app novamente.`,
+      });
+    }
+
+    console.log(`[FCM] Enviando para ${target} (token: ...${fcmToken.slice(-8)})`);
+
+    // Estratégia data-only: sem "notification" na raiz.
+    // O onBackgroundMessage do SW exibe o banner manualmente no iOS PWA.
+    const messaging = getMessaging();
+    await messaging.send({
+      token: fcmToken,
+      webpush: {
+        data: {
+          title: title ?? "CasalPay 💞",
+          body:  message,
+        },
+        headers: {
+          Urgency: "high",
+          TTL: "60",
+        },
+      },
     });
 
-    if (tokensToNotify.length === 0) {
-      return res.status(404).json({
-        error:
-          "O destinatário ainda não abriu o app ou não aceitou as notificações.",
-      });
-    }
+    console.log(`[FCM] Notificação entregue para ${target} com sucesso.`);
+    return res.status(200).json({ ok: true, sent: 1 });
 
-    // Dispara as notificações — estratégia data-only para iOS PWA
-    // MOTIVO: payload com "notification" na raiz faz o Firebase SDK ignorar o
-    // onBackgroundMessage e tentar exibir automaticamente — o que NÃO funciona no iOS Safari PWA.
-    // Com apenas "data", o SW recebe o push via onBackgroundMessage e chama showNotification manualmente.
-    const messaging = getMessaging();
-    const results = await Promise.allSettled(
-      tokensToNotify.map((token) =>
-        messaging.send({
-          token,
-          // APENAS webpush com data — sem "notification" na raiz
-          webpush: {
-            data: {
-              title: title ?? "CasalPay 💞",
-              body: message,
-            },
-            headers: {
-              Urgency: "high",
-              TTL: "60",
-            },
-          },
-        })
-      )
-    );
-
-    const succeeded = results.filter((r) => r.status === "fulfilled").length;
-    const failed    = results.filter((r) => r.status === "rejected");
-
-    if (succeeded === 0) {
-      console.error("[FCM] Todos os envios falharam:", failed);
-      return res.status(500).json({ error: "Falha ao entregar a notificação." });
-    }
-
-    return res.status(200).json({ ok: true, sent: succeeded });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Erro interno desconhecido";
     console.error("[FCM] Erro no handler:", msg);

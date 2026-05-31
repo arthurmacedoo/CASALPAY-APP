@@ -57,8 +57,8 @@ export const MessagesPage: React.FC = () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          senderEmail: user?.email,
-          title: `${senderEmoji} ${senderName} mandou um carinho`,
+          target: targetName,                                    // "Arthur" ou "Zara" — destinatário
+          title:  `${senderEmoji} ${senderName} mandou um carinho`,
           message: `${msg.emoji} ${msg.text}`,
         }),
       });

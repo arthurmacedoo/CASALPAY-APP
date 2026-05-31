@@ -30,29 +30,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: "Server config error" });
   }
 
-  const { token, email, uid, platform } = req.body ?? {};
+  // "user" é o nome fixo do perfil: "Arthur" ou "Zara"
+  const { token, user, platform } = req.body ?? {};
 
-  if (!token || !uid) {
-    return res.status(400).json({ error: "Token and UID are required" });
+  if (!token || !user) {
+    return res.status(400).json({ error: "token e user são obrigatórios" });
   }
 
   const COUPLE_ID = process.env.VITE_COUPLE_ID ?? "arthur-namorada-2026";
 
   try {
     const db = getFirestore();
-    
-    await db.collection("couples").doc(COUPLE_ID).collection("fcm_tokens").doc(uid).set({
-      token,
-      email: email || "",
-      uid,
-      updatedAt: new Date(),
-      platform: platform || "unknown",
-    }, { merge: true });
 
+    // Documento identificado pelo nome (ex: doc "Arthur" ou doc "Zara")
+    await db
+      .collection("couples")
+      .doc(COUPLE_ID)
+      .collection("fcm_tokens")
+      .doc(user)
+      .set({
+        token,
+        user,           // "Arthur" ou "Zara"
+        updatedAt: new Date(),
+        platform: platform || "unknown",
+      }, { merge: true });
+
+    console.log(`[FCM] Token registrado para ${user}`);
     return res.status(200).json({ ok: true });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
-    console.error("[FCM] Error saving token via API:", msg);
+    console.error("[FCM] Erro ao salvar token:", msg);
     return res.status(500).json({ error: msg });
   }
 }

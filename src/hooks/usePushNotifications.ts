@@ -3,6 +3,7 @@ import { getToken, onMessage } from "firebase/messaging";
 import { getFirebaseMessaging } from "../lib/firebase";
 import type { User } from "firebase/auth";
 import toast from "react-hot-toast";
+import { OWNER_NAME, PARTNER_NAME } from "../constants/couple";
 
 // A chave VAPID agora é injetada via Vercel Environment Variables
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
@@ -49,6 +50,10 @@ export function usePushNotifications(user: User | null) {
       }
       
       // 3. Salva o token chamando a nossa API serverless
+      // Determina o nome do usuário pelo e-mail (Arthur ou Zara)
+      const isOwner  = (user.email ?? "").toLowerCase().startsWith("arthur");
+      const userName = isOwner ? OWNER_NAME : PARTNER_NAME;
+
       try {
         const platformStr = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? "mobile" : "desktop";
         const response = await fetch("/api/register-device", {
@@ -56,9 +61,8 @@ export function usePushNotifications(user: User | null) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             token,
-            email: user.email,
-            uid: user.uid,
-            platform: platformStr
+            user: userName,   // "Arthur" ou "Zara" — documento no Firestore
+            platform: platformStr,
           }),
         });
         
