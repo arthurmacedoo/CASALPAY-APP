@@ -18,12 +18,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
 }) => {
   const {
     netBalance,
-    totalExpensesByArthur,
-    totalExpensesByZara,
-    totalSettledByArthur,
-    totalSettledByZara,
     expenseCount,
-    settlementCount,
   } = balance;
 
   const isEven = netBalance === 0;
@@ -97,52 +92,6 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
           ? "Nenhum Pix necessário este mês 🎉"
           : "Valor líquido a pagar no Pix"}
       </p>
-
-      {/* Cards de totais - Despesas */}
-      <div className="grid grid-cols-3 gap-2 mb-2">
-        <div className="bg-bg-elevated rounded-2xl p-3 text-center">
-          <p className="text-[10px] text-text-muted mb-1 uppercase tracking-wider">Arthur pagou</p>
-          <p className="text-sm font-semibold text-accent-blue tabular-nums">
-            {formatBRL(totalExpensesByArthur)}
-          </p>
-        </div>
-        <div className="bg-bg-elevated rounded-2xl p-3 text-center">
-          <p className="text-[10px] text-text-muted mb-1 uppercase tracking-wider">Zara pagou</p>
-          <p className="text-sm font-semibold text-accent-pink tabular-nums">
-            {formatBRL(totalExpensesByZara)}
-          </p>
-        </div>
-        <div className="bg-bg-elevated rounded-2xl p-3 text-center">
-          <p className="text-[10px] text-text-muted mb-1 uppercase tracking-wider">Despesas</p>
-          <p className="text-sm font-semibold text-text-primary">
-            {expenseCount}
-          </p>
-        </div>
-      </div>
-
-      {/* Cards de totais - Acertos */}
-      {(totalSettledByArthur > 0 || totalSettledByZara > 0) && (
-        <div className="grid grid-cols-3 gap-2 mb-4 opacity-80">
-          <div className="bg-bg-elevated rounded-2xl p-2 text-center">
-            <p className="text-[10px] text-text-muted mb-0.5">Pix dele</p>
-            <p className="text-xs font-semibold text-accent-blue tabular-nums">
-              {formatBRL(totalSettledByArthur)}
-            </p>
-          </div>
-          <div className="bg-bg-elevated rounded-2xl p-2 text-center">
-            <p className="text-[10px] text-text-muted mb-0.5">Pix dela</p>
-            <p className="text-xs font-semibold text-accent-pink tabular-nums">
-              {formatBRL(totalSettledByZara)}
-            </p>
-          </div>
-          <div className="bg-bg-elevated rounded-2xl p-2 text-center">
-            <p className="text-[10px] text-text-muted mb-0.5">Acertos</p>
-            <p className="text-xs font-semibold text-text-primary">
-              {settlementCount}
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Botão copiar resumo Pix */}
       <button
