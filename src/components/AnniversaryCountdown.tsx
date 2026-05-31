@@ -56,12 +56,12 @@ export const AnniversaryCountdown: React.FC = () => {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p id="anniversary-countdown-title" className="text-[11px] font-bold text-accent-pink uppercase tracking-widest mt-1">
-              💞 Contagem regressiva: um ano de juntos
+              🤍 Contagem regressiva: um ano juntos
             </p>
           </div>
           <button
             type="button"
-            aria-label="Abrir celebração de um ano de juntos"
+            aria-label="Abrir celebração de um ano juntos"
             onClick={() => setIsModalOpen(true)}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-pink/10 text-xl hover:bg-accent-pink/20 transition active:scale-95 shadow-[0_0_15px_rgba(236,72,153,0.15)]"
           >
@@ -120,11 +120,11 @@ export const AnniversaryCountdown: React.FC = () => {
 
             <div className="relative z-10">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-accent-pink/15 text-3xl shadow-[0_0_30px_rgba(236,72,153,0.25)]">
-                💞
+                🤍
               </div>
 
               <h2 id="anniversary-modal-title" className="text-xl font-bold text-text-primary">
-                {isPassed ? "Feliz 1 ano de juntos!" : "Um ano de juntos"}
+                {isPassed ? "Feliz 1 ano juntos!" : "Um ano juntos"}
               </h2>
 
               {!isPassed && (
@@ -134,7 +134,7 @@ export const AnniversaryCountdown: React.FC = () => {
               )}
 
               <p className="mt-6 text-4xl font-black text-accent-pink tabular-nums drop-shadow-sm">
-                {isPassed ? "💖" : `${daysLeft} dias`}
+                {isPassed ? "🤍" : `${daysLeft} dias`}
               </p>
 
               <p className="mt-3 text-[10px] uppercase tracking-[0.22em] text-text-muted">
