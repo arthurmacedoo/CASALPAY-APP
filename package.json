@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "firebase": "^11.0.0",
+    "firebase-admin": "^13.10.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.0.0"
@@ -19,6 +20,7 @@
     "@eslint/js": "^9.13.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@vercel/node": "^5.8.8",
     "@vitejs/plugin-react": "^4.3.2",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.13.0",

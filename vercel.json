@@ -9,7 +9,7 @@
       "destination": "https://casalpay.firebaseapp.com/__/firebase/init.json"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/"
     }
   ]

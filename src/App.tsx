@@ -5,7 +5,9 @@ import { BottomNav } from "./components/BottomNav";
 import { HomePage } from "./pages/Home";
 import { AddExpensePage } from "./pages/AddExpense";
 import { HistoryPage } from "./pages/History";
+import { MessagesPage } from "./pages/Messages";
 import { LoginPage } from "./pages/Login";
+import { usePushNotifications } from "./hooks/usePushNotifications";
 
 const LoadingScreen: React.FC = () => (
   <div className="flex flex-col items-center justify-center min-h-screen gap-6">
@@ -34,15 +36,11 @@ const ErrorScreen: React.FC<{ message: string }> = ({ message }) => (
   </div>
 );
 
-const App: React.FC = () => {
-  const { user, loading, error, isAuthorized } = useAuth();
-
-  if (loading) return <LoadingScreen />;
-  if (error) return <ErrorScreen message={error} />;
-  
-  if (!user || !isAuthorized) {
-    return <LoginPage />;
-  }
+// Componente interno que só monta quando autenticado — hook pode ser chamado sem violar regras
+const AuthenticatedApp: React.FC = () => {
+  const { user } = useAuth();
+  // Hook sempre chamado na mesma ordem, dentro de componente autenticado
+  usePushNotifications(user);
 
   return (
     <BrowserRouter>
@@ -51,11 +49,22 @@ const App: React.FC = () => {
           <Route path="/" element={<HomePage />} />
           <Route path="/add" element={<AddExpensePage />} />
           <Route path="/history" element={<HistoryPage />} />
+          <Route path="/messages" element={<MessagesPage />} />
         </Routes>
         <BottomNav />
       </div>
     </BrowserRouter>
   );
+};
+
+const App: React.FC = () => {
+  const { user, loading, error, isAuthorized } = useAuth();
+
+  if (loading) return <LoadingScreen />;
+  if (error) return <ErrorScreen message={error} />;
+  if (!user || !isAuthorized) return <LoginPage />;
+
+  return <AuthenticatedApp />;
 };
 
 export default App;

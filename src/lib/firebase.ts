@@ -11,6 +11,7 @@ import {
   collection,
   doc,
 } from "firebase/firestore";
+import { getMessaging } from "firebase/messaging";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Configuração do Firebase — variáveis no arquivo .env
@@ -45,6 +46,19 @@ export const db = initializeFirestore(app, {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Firebase Cloud Messaging — para push notifications
+// Apenas instanciado em contextos que suportam (não no Service Worker)
+// ─────────────────────────────────────────────────────────────────────────────
+export const getFirebaseMessaging = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    return getMessaging(app);
+  } catch {
+    return null;
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ID do casal — identificador (não é segredo, proteção real vem dos UIDs no Firestore)
 // O mesmo valor deve ser usado nos dois celulares via .env
 // ─────────────────────────────────────────────────────────────────────────────
@@ -66,3 +80,7 @@ export const transactionsRef = () =>
 /** Referência a uma transação específica */
 export const transactionDocRef = (id: string) =>
   doc(db, "couples", COUPLE_ID, "transactions", id);
+
+/** Coleção de tokens FCM do casal */
+export const fcmTokensRef = () =>
+  collection(db, "couples", COUPLE_ID, "fcm_tokens");
