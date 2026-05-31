@@ -18,7 +18,6 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
 }) => {
   const {
     netBalance,
-    expenseCount,
   } = balance;
 
   const isEven = netBalance === 0;
