@@ -70,7 +70,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const tokensToNotify: string[] = [];
     tokensSnap.forEach((snap) => {
       const data = snap.data();
-      if (data.email !== senderEmail && typeof data.token === "string" && data.token.length > 0) {
+      const dbEmail = (data.email || "").toLowerCase();
+      const sendEmail = senderEmail.toLowerCase();
+
+      if (dbEmail !== sendEmail && typeof data.token === "string" && data.token.length > 0) {
         tokensToNotify.push(data.token);
       }
     });
@@ -105,7 +108,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               aps: {
                 sound: "default",
                 badge: 1,
-                "content-available": 1,
               },
             },
             headers: {

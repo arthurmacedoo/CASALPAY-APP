@@ -30,7 +30,7 @@ export function usePushNotifications(user: User | null) {
 
       // 2. Obtém o token FCM do dispositivo atual
       if (!VAPID_KEY) {
-        alert("⚠️ VAPID_KEY ausente! Por favor, configure VITE_FIREBASE_VAPID_KEY no painel da Vercel.");
+        console.warn("⚠️ VAPID_KEY ausente! Configure VITE_FIREBASE_VAPID_KEY na Vercel.");
         return;
       }
 
@@ -38,17 +38,16 @@ export function usePushNotifications(user: User | null) {
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: swReg,
       }).catch(err => {
-        alert("Erro getToken: " + err.message);
+        console.error("Erro getToken: " + err.message);
         return null;
       });
 
       if (!token) {
-        alert("Falha: Token gerado foi nulo.");
         console.warn("[FCM] getToken retornou nulo.");
         return;
       }
       
-      // 3. Salva o token chamando a nossa API serverless (bypassa regras do Firestore client)
+      // 3. Salva o token chamando a nossa API serverless
       try {
         const platformStr = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? "mobile" : "desktop";
         const response = await fetch("/api/register-device", {
@@ -63,16 +62,13 @@ export function usePushNotifications(user: User | null) {
         });
         
         if (response.ok) {
-          alert("Sucesso! Token salvo no banco via API.");
           console.log("[FCM] Token salvo no banco com sucesso via API!");
         } else {
           const errText = await response.text();
-          alert("Erro na API ao salvar token: " + errText);
           console.error("[FCM] API falhou ao salvar token:", errText);
         }
       } catch (apiErr: any) {
-        alert("Erro de rede ao salvar token: " + apiErr.message);
-        console.error("[FCM] Erro na requisição para /api/register-device:", apiErr);
+        console.error("[FCM] Erro na requisição para /api/register-device:", apiErr.message);
       }
 
       // 4. Exibe notificações quando o app estiver em FOREGROUND (aberto na tela)
