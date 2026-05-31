@@ -1,0 +1,16 @@
+{
+  "projectId": "prj_lTkS6TLHoD3joe1TFa8CKCbtKah9",
+  "orgId": "team_lHgpJu76RwcdEsvxGVQB3GTn",
+  "projectName": "casalpay",
+  "settings": {
+    "createdAt": 1780170961586,
+    "framework": "vite",
+    "devCommand": null,
+    "installCommand": null,
+    "buildCommand": null,
+    "outputDirectory": null,
+    "rootDirectory": null,
+    "directoryListing": false,
+    "nodeVersion": "24.x"
+  }
+}

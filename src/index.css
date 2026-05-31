@@ -1,0 +1,172 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+    background-color: #0D0D14;
+    color: #F0F0F8;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    background-color: #0D0D14;
+    overscroll-behavior: none;
+  }
+
+  #root {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  input, select, textarea, button {
+    font-family: inherit;
+  }
+
+  /* Scrollbar dark */
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #16161F;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #2A2A3E;
+    border-radius: 2px;
+  }
+}
+
+@layer components {
+  /* ─── Safe area padding para iPhone ─── */
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* ─── Card base ─── */
+  .card {
+    @apply bg-bg-card rounded-3xl border border-border p-5 shadow-card;
+  }
+
+  /* ─── Botão primário ─── */
+  .btn-primary {
+    @apply w-full py-4 px-6 rounded-2xl bg-accent-pink text-white font-semibold text-base
+           active:scale-95 transition-all duration-150 shadow-glow
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* ─── Input base ─── */
+  .input-base {
+    @apply w-full px-4 py-3.5 rounded-2xl bg-bg-elevated border border-border
+           text-text-primary placeholder-text-muted text-base
+           focus:outline-none focus:border-accent-blue focus:ring-1 focus:ring-accent-blue
+           transition-colors duration-150;
+  }
+
+  /* Ajuste específico para data no iOS Safari (evitar centralização e padding nativo) */
+  input[type="date"].input-base {
+    text-align: left;
+    -webkit-appearance: none;
+    appearance: none;
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+  }
+  
+  input[type="date"].input-base::-webkit-date-and-time-value {
+    text-align: left;
+    margin: 0;
+  }
+
+  /* ─── Chip de seleção ─── */
+  .chip {
+    @apply flex-1 py-3 px-3 rounded-xl border border-border text-center text-sm font-medium
+           text-text-secondary transition-all duration-150 cursor-pointer select-none
+           active:scale-95;
+  }
+  .chip-selected-pink {
+    @apply bg-accent-pink/20 border-accent-pink text-accent-pink;
+  }
+  .chip-selected-blue {
+    @apply bg-accent-blue/20 border-accent-blue text-accent-blue;
+  }
+  .chip-selected-green {
+    @apply bg-accent-green/20 border-accent-green text-accent-green;
+  }
+  .chip-selected-purple {
+    @apply bg-violet-500/20 border-violet-400 text-violet-300;
+  }
+}
+
+/* ─── Animação de fade-in ─── */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.3s ease-out forwards;
+}
+
+/* ─── Animação de pulse suave para o card de saldo ─── */
+@keyframes softPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}
+
+.animate-soft-pulse {
+  animation: softPulse 2s ease-in-out infinite;
+}
+
+/* ─── Spinner de loading ─── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #2A2A3E;
+  border-top-color: #E879A0;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* ─── Toast de sucesso ─── */
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.toast {
+  animation: slideInDown 0.3s ease-out forwards;
+}
