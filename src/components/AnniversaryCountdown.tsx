@@ -8,9 +8,6 @@ export const AnniversaryCountdown: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    // 26 de novembro de 2027 — 1 ano de namoro (mês 10 em JS = novembro)
-    const targetDate = new Date(2027, 10, 26);
-
     const updateCountdown = () => {
       const now = new Date();
       const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
