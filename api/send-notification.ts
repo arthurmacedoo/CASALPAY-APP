@@ -91,27 +91,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       tokensToNotify.map((token) =>
         messaging.send({
           token,
+          // Raiz notification: necessário para todos os canais
           notification: {
             title: title ?? "CasalPay 💞",
             body: message,
           },
-          android: {
-            priority: "high",
-            notification: {
-              sound: "default",
-              channelId: "casalpay-messages",
-              priority: "high",
-            },
-          },
+          // Webpush limpo: essencial para iOS PWA / Safari Web Push
           webpush: {
             notification: {
-              title: title ?? "CasalPay 💞",
-              body: message,
               icon: "/icon-192.png",
               badge: "/icon-192.png",
               tag: "casalpay-love",
               renotify: true,
-              vibrate: [200, 100, 200],
             },
             headers: {
               Urgency: "high",

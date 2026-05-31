@@ -73,27 +73,17 @@ export function usePushNotifications(user: User | null) {
       }
 
       // 4. Exibe notificações quando o app estiver em FOREGROUND (aberto na tela)
+      // No iOS Safari, showNotification em foreground é bloqueado — só o Toast funciona.
+      // O banner nativo (background) é gerenciado exclusivamente pelo Service Worker.
       const unsubscribe = onMessage(messaging, (payload) => {
         const { title, body } = payload.notification ?? {};
         if (!title) return;
         
-        // Exibe um Toast in-app visual garantido (Fallback para quando o app está aberto)
+        // Toast in-app: garante que o usuário veja a mensagem com o app aberto
         toast(`${title}\n${body ?? ""}`, {
           icon: '💌',
           duration: 5000,
         });
-
-        // Tenta usar a API via Service Worker (Obrigatório no iOS Safari)
-        if (Notification.permission === "granted") {
-          navigator.serviceWorker.ready.then((reg) => {
-            reg.showNotification(title, {
-              body: body ?? "",
-              icon: "/icon-192.png",
-              badge: "/icon-192.png",
-              tag: "casalpay-love",
-            });
-          });
-        }
       });
 
       return unsubscribe;
