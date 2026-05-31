@@ -11,7 +11,7 @@ export const AnniversaryCountdown: React.FC = () => {
     const updateCountdown = () => {
       const now = new Date();
       const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const targetMidnight = new Date(2027, 10, 26);
+      const targetMidnight = new Date(2026, 10, 26);
       const diffMs = targetMidnight.getTime() - todayMidnight.getTime();
       const days = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
       setIsPassed(days === 0);
@@ -74,7 +74,7 @@ export const AnniversaryCountdown: React.FC = () => {
           )}
           
           <p className="text-[10px] uppercase tracking-widest text-text-muted mt-2">
-            26 de novembro de 2027
+            26 de novembro de 2026
           </p>
         </div>
       </section>
@@ -128,7 +128,7 @@ export const AnniversaryCountdown: React.FC = () => {
               </p>
 
               <p className="mt-3 text-[10px] uppercase tracking-[0.22em] text-text-muted">
-                26 de novembro de 2027
+                26 de novembro de 2026
               </p>
 
               <button
