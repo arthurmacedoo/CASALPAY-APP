@@ -15,41 +15,38 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// ESTRATÉGIA DATA-ONLY:
-// O backend envia apenas "webpush.data" sem "notification" na raiz.
-// Isso faz o Firebase SDK NÃO tentar exibir automaticamente (que não funciona no iOS PWA).
-// O onBackgroundMessage chama showNotification manualmente — única forma garantida no iOS.
-messaging.onBackgroundMessage(function(payload) {
-  const title = (payload.data && payload.data.title) || 'CasalPay 💞';
-  const body  = (payload.data && payload.data.body)  || '💌';
+// Exibe notificação quando o app está em BACKGROUND ou FECHADO.
+// O payload do backend tem "notification" na raiz, o que é obrigatório
+// para a Apple entregar o Web Push. O Firebase SW lê esse campo e
+// exibe o banner nativo automaticamente via onBackgroundMessage.
+messaging.onBackgroundMessage((payload) => {
+  const { title, body } = payload.notification ?? {};
+  if (!title) return;
 
   self.registration.showNotification(title, {
-    body:     body,
-    icon:     '/icon-192.png',
-    badge:    '/icon-192.png',
-    tag:      'casalpay-love',
-    renotify: true,
-    data:     { url: self.registration.scope },
+    body: body ?? '',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    tag: 'casalpay-love',
+    data: { url: self.registration.scope },
   });
 });
 
 // Abre o app ao tocar na notificação
-self.addEventListener('notificationclick', function(event) {
+self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  const targetUrl = (event.notification.data && event.notification.data.url)
-    || self.registration.scope;
+  const targetUrl =
+    (event.notification.data && event.notification.data.url) ||
+    self.registration.scope;
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(windowClients) {
-      // Se o app já estiver aberto, foca nele
-      for (var i = 0; i < windowClients.length; i++) {
-        var client = windowClients[i];
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
         if (client.url.startsWith(self.registration.scope) && 'focus' in client) {
           return client.focus();
         }
       }
-      // Senão, abre uma nova janela
       if (clients.openWindow) {
         return clients.openWindow(targetUrl);
       }

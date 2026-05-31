@@ -6,7 +6,7 @@ import { getMessaging } from "firebase-admin/messaging";
 // ── Inicializa Firebase Admin SDK (singleton) ────────────────────────────────
 if (!getApps().length) {
   const privateKey = (process.env.FIREBASE_PRIVATE_KEY ?? "")
-    .replace(/\\n/g, "\n"); // env vars escapam \n — precisa reverter
+    .replace(/\\n/g, "\n");
 
   if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !privateKey) {
     console.error("[FCM] Variáveis de ambiente do Firebase Admin SDK não configuradas.");
@@ -23,7 +23,6 @@ if (!getApps().length) {
 
 // ── Handler principal ────────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS — mesmo domínio Vercel
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -35,7 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!getApps().length) {
     return res.status(500).json({
-      error: "Configuração do servidor incompleta. Configure as variáveis FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL e FIREBASE_PRIVATE_KEY na Vercel.",
+      error: "Configuração do servidor incompleta.",
     });
   }
 
@@ -51,7 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const db = getFirestore();
 
-    // Busca DIRETAMENTE o documento do destinatário pelo nome (ex: doc "Zara")
+    // Busca diretamente o documento do destinatário pelo nome
     const tokenDoc = await db
       .collection("couples")
       .doc(COUPLE_ID)
@@ -65,30 +64,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const tokenData = tokenDoc.data();
-    const fcmToken  = tokenData?.token;
+    const fcmToken = tokenDoc.data()?.token;
 
     if (!fcmToken || typeof fcmToken !== "string" || fcmToken.length === 0) {
       return res.status(404).json({
-        error: `Token FCM de ${target} está vazio ou inválido. Peça para ${target} abrir o app novamente.`,
+        error: `Token FCM de ${target} está vazio. Peça para ${target} abrir o app novamente.`,
       });
     }
 
     console.log(`[FCM] Enviando para ${target} (token: ...${fcmToken.slice(-8)})`);
 
-    // Estratégia data-only: sem "notification" na raiz.
-    // O onBackgroundMessage do SW exibe o banner manualmente no iOS PWA.
     const messaging = getMessaging();
     await messaging.send({
       token: fcmToken,
+      // "notification" na raiz é OBRIGATÓRIO para a Apple entregar o Web Push em background
+      notification: {
+        title: title ?? "CasalPay:",
+        body:  message,
+      },
       webpush: {
-        data: {
-          title: title ?? "CasalPay 💞",
-          body:  message,
+        notification: {
+          icon:  "/icon-192.png",
+          badge: "/icon-192.png",
+          tag:   "casalpay-love",
         },
         headers: {
           Urgency: "high",
-          TTL: "60",
+          TTL:     "60",
         },
       },
     });
