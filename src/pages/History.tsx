@@ -26,8 +26,8 @@ export const HistoryPage: React.FC = () => {
     navigate("/add", { state: { transaction: t } });
   };
 
-  const handleDelete = async (id: string) => {
-    await deleteTransaction(id);
+  const handleDelete = async (t: Transaction) => {
+    await deleteTransaction(t);
   };
 
   const monthLabel = formatMonthLabel(selectedMonth);

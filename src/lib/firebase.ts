@@ -16,6 +16,11 @@ import { getMessaging } from "firebase/messaging";
 // ─────────────────────────────────────────────────────────────────────────────
 // Configuração do Firebase — variáveis no arquivo .env
 // ─────────────────────────────────────────────────────────────────────────────
+export let auth: any = null;
+export let db: any = null;
+export let isFirebaseConfigured = false;
+export let firebaseConfigError = "";
+
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: "casalpay.firebaseapp.com",
@@ -25,25 +30,32 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-const app = initializeApp(firebaseConfig);
+const missingKeys = [];
+if (!firebaseConfig.apiKey) missingKeys.push("VITE_FIREBASE_API_KEY");
+if (!firebaseConfig.projectId) missingKeys.push("VITE_FIREBASE_PROJECT_ID");
+if (!firebaseConfig.appId) missingKeys.push("VITE_FIREBASE_APP_ID");
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Authentication — Custom AuthDomain para PWA e persistência em IndexedDB
-// ─────────────────────────────────────────────────────────────────────────────
-export const auth = initializeAuth(app, {
-  persistence: [
-    indexedDBLocalPersistence,
-    browserLocalPersistence,
-    browserSessionPersistence,
-  ],
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Firestore — persistentLocalCache substitui o deprecated enableIndexedDbPersistence
-// ─────────────────────────────────────────────────────────────────────────────
-export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache(),
-});
+if (missingKeys.length > 0) {
+  firebaseConfigError = `Variáveis de ambiente ausentes: ${missingKeys.join(", ")}`;
+} else {
+  try {
+    const app = initializeApp(firebaseConfig);
+    auth = initializeAuth(app, {
+      persistence: [
+        indexedDBLocalPersistence,
+        browserLocalPersistence,
+        browserSessionPersistence,
+      ],
+    });
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache(),
+    });
+    isFirebaseConfigured = true;
+  } catch (error: any) {
+    console.error("Falha ao inicializar o Firebase:", error);
+    firebaseConfigError = `Erro na inicialização do Firebase: ${error.message}`;
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Firebase Cloud Messaging — para push notifications

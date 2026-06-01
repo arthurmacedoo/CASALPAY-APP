@@ -8,12 +8,15 @@ import {
   updateDoc,
   deleteDoc,
   serverTimestamp,
+  writeBatch,
+  getDocs,
 } from "firebase/firestore";
 import type { Transaction, TransactionFormData } from "../types";
 import {
   transactionsRef,
   transactionDocRef,
   COUPLE_ID,
+  db,
 } from "../lib/firebase";
 import { getMonthKey } from "../lib/calculations";
 
@@ -23,7 +26,7 @@ interface UseTransactionsReturn {
   error: string | null;
   addTransaction: (data: TransactionFormData, amountCents: number) => Promise<void>;
   updateTransaction: (id: string, data: TransactionFormData, amountCents: number) => Promise<void>;
-  deleteTransaction: (id: string) => Promise<void>;
+  deleteTransaction: (transaction: Transaction) => Promise<void>;
 }
 
 export function useTransactions(monthKey: string): UseTransactionsReturn {
@@ -78,32 +81,74 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
     async (data: TransactionFormData, amountCents: number) => {
       const baseData = {
         description: data.description.trim(),
-        amount: amountCents,
-        date: data.date,
-        monthKey: getMonthKey(data.date),
         coupleId: COUPLE_ID, // Pode manter no doc, mas a regra usa o path
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
 
-      let docData;
-      if (data.type === "expense") {
-        docData = {
-          ...baseData,
-          type: "expense",
-          paidBy: data.paidBy,
-          splitType: data.splitType,
-        };
-      } else {
-        docData = {
-          ...baseData,
-          type: "settlement",
-          from: data.from,
-          to: data.to,
-        };
-      }
+      if (data.type === "expense" && data.isInstallment && data.installmentCount && data.installmentCount > 1) {
+        const count = data.installmentCount;
+        const baseAmount = Math.floor(amountCents / count);
+        const remainder = amountCents % count;
+        const groupId = crypto.randomUUID();
 
-      await addDoc(transactionsRef(), docData);
+        const [year, month, day] = data.date.split("-").map(Number);
+        
+        for (let i = 1; i <= count; i++) {
+          const installmentAmount = i === 1 ? baseAmount + remainder : baseAmount;
+          
+          const targetMonthZeroIndex = month - 1 + (i - 1);
+          const newYear = year + Math.floor(targetMonthZeroIndex / 12);
+          const newMonthIndex = targetMonthZeroIndex % 12;
+          const lastDayOfTargetMonth = new Date(newYear, newMonthIndex + 1, 0).getDate();
+          const newDay = Math.min(day, lastDayOfTargetMonth);
+          
+          const newMonthStr = String(newMonthIndex + 1).padStart(2, "0");
+          const newDayStr = String(newDay).padStart(2, "0");
+          const newDateStr = `${newYear}-${newMonthStr}-${newDayStr}`;
+
+          const docData = {
+            ...baseData,
+            amount: installmentAmount,
+            date: newDateStr,
+            monthKey: getMonthKey(newDateStr),
+            type: "expense",
+            paidBy: data.paidBy,
+            splitType: data.splitType,
+            installmentCount: count,
+            currentInstallment: i,
+            groupId: groupId,
+            originalAmount: amountCents
+          };
+
+          await addDoc(transactionsRef(), docData);
+        }
+      } else {
+        let docData;
+        if (data.type === "expense") {
+          docData = {
+            ...baseData,
+            amount: amountCents,
+            date: data.date,
+            monthKey: getMonthKey(data.date),
+            type: "expense",
+            paidBy: data.paidBy,
+            splitType: data.splitType,
+          };
+        } else {
+          docData = {
+            ...baseData,
+            amount: amountCents,
+            date: data.date,
+            monthKey: getMonthKey(data.date),
+            type: "settlement",
+            from: data.from,
+            to: data.to,
+          };
+        }
+
+        await addDoc(transactionsRef(), docData);
+      }
     },
     []
   );
@@ -140,8 +185,23 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
     []
   );
 
-  const deleteTransaction = useCallback(async (id: string) => {
-    await deleteDoc(transactionDocRef(id));
+  const deleteTransaction = useCallback(async (transaction: Transaction) => {
+    if (transaction.type === "expense" && transaction.groupId) {
+      const q = query(
+        transactionsRef(),
+        where("groupId", "==", transaction.groupId)
+      );
+      const querySnapshot = await getDocs(q);
+      const batch = writeBatch(db);
+      
+      querySnapshot.forEach((docSnap) => {
+        batch.delete(docSnap.ref);
+      });
+      
+      await batch.commit();
+    } else {
+      await deleteDoc(transactionDocRef(transaction.id));
+    }
   }, []);
 
   return {

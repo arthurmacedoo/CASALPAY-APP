@@ -20,6 +20,11 @@ export interface ExpenseTransaction {
   coupleId: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  // Parcelamento (opcional)
+  installmentCount?: number;
+  currentInstallment?: number;
+  groupId?: string;
+  originalAmount?: number;
 }
 
 // ─── Transação de acerto / Pix ────────────────────────────────────────────────
@@ -54,6 +59,8 @@ export interface ExpenseFormData {
   paidBy: Person;
   splitType: SplitType;
   date: string;
+  isInstallment?: boolean;
+  installmentCount?: number;
 }
 
 export interface SettlementFormData {

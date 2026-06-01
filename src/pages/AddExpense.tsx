@@ -21,6 +21,8 @@ const initialExpenseData: ExpenseFormData = {
   paidBy: "Arthur",
   splitType: "50/50",
   date: getTodayDateString(),
+  isInstallment: false,
+  installmentCount: 2,
 };
 
 const initialSettlementData: SettlementFormData = {
@@ -96,10 +98,15 @@ export const AddExpensePage: React.FC = () => {
     setSaving(true);
 
     try {
+      let submitData = { ...form };
+      if (submitData.type === "expense" && submitData.isInstallment) {
+        submitData.splitType = submitData.paidBy === OWNER_NAME ? "100% Arthur" : "100% Zara";
+      }
+
       if (isEditing && editTransaction) {
-        await updateTransaction(editTransaction.id, form, cents);
+        await updateTransaction(editTransaction.id, submitData, cents);
       } else {
-        await addTransaction(form, cents);
+        await addTransaction(submitData, cents);
       }
 
       setShowSuccess(true);
@@ -120,6 +127,19 @@ export const AddExpensePage: React.FC = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const digits = e.target.value.replace(/\D/g, "");
+    if (!digits) {
+      setForm((f) => ({ ...f, amount: "" }));
+      return;
+    }
+    const numericValue = parseInt(digits, 10);
+    const stringValue = numericValue.toString().padStart(3, "0");
+    const integerPart = stringValue.slice(0, -2);
+    const decimalPart = stringValue.slice(-2);
+    setForm((f) => ({ ...f, amount: `${integerPart},${decimalPart}` }));
   };
 
   const isExpense = form.type === "expense";
@@ -157,11 +177,18 @@ export const AddExpensePage: React.FC = () => {
         
         {/* Toggle Tipo (Apenas criação) */}
         {!isEditing && (
-          <div className="flex bg-bg-elevated p-1 rounded-xl">
+          <div className="relative flex bg-bg-elevated p-1 rounded-xl">
+            {/* Sliding Pill Indicator */}
+            <div
+              className={`absolute top-1 bottom-1 w-[calc(50%-0.25rem)] rounded-lg transition-all duration-300 ease-in-out shadow-md ${
+                isExpense ? "translate-x-0 bg-accent-pink" : "translate-x-full bg-violet-500"
+              }`}
+            />
+            
             <button
               type="button"
-              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors ${
-                isExpense ? "bg-accent-pink text-white shadow" : "text-text-secondary hover:text-text-primary"
+              className={`relative z-10 flex-1 py-2 text-sm font-medium rounded-lg transition-colors duration-300 ${
+                isExpense ? "text-white" : "text-text-secondary hover:text-text-primary"
               }`}
               onClick={() => setForm({ ...initialExpenseData, date: form.date })}
             >
@@ -169,8 +196,8 @@ export const AddExpensePage: React.FC = () => {
             </button>
             <button
               type="button"
-              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors ${
-                !isExpense ? "bg-accent-purple text-white shadow" : "text-text-secondary hover:text-text-primary"
+              className={`relative z-10 flex-1 py-2 text-sm font-medium rounded-lg transition-colors duration-300 ${
+                !isExpense ? "text-white" : "text-text-secondary hover:text-text-primary"
               }`}
               onClick={() => setForm({ ...initialSettlementData, date: form.date })}
             >
@@ -199,11 +226,63 @@ export const AddExpensePage: React.FC = () => {
           label="Valor total (R$)"
           placeholder="0,00"
           value={form.amount}
-          inputMode="decimal"
-          onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+          inputMode="numeric"
+          onChange={handleAmountChange}
           error={errors.amount}
-          hint="Use vírgula ou ponto como separador decimal"
         />
+
+        {/* Toggle Parcelamento */}
+        {!isEditing && isExpense && (
+          <div className="flex flex-col gap-3">
+            <label className="flex items-center justify-between bg-bg-elevated p-4 rounded-xl border border-border cursor-pointer">
+              <span className="text-sm font-medium text-text-primary">Compra Parcelada?</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={form.isInstallment || false}
+                onClick={() => setForm((f) => f.type === "expense" ? { ...f, isInstallment: !f.isInstallment } : f)}
+                className={`relative inline-flex h-6 w-12 items-center rounded-full transition-colors ${
+                  form.isInstallment ? 'bg-accent-pink' : 'bg-border'
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                    form.isInstallment ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </label>
+
+            {form.isInstallment && (
+              <div className="animate-fade-in-up flex flex-col gap-3 bg-bg-elevated p-4 rounded-xl border border-border">
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="installment-count" className="text-sm font-medium text-text-secondary">
+                    Número de Parcelas
+                  </label>
+                  <select
+                    id="installment-count"
+                    className="w-full bg-bg-card border border-border rounded-lg p-3 text-text-primary focus:outline-none focus:border-accent-pink transition-colors"
+                    value={form.installmentCount || 2}
+                    onChange={(e) => setForm((f) => f.type === "expense" ? { ...f, installmentCount: Number(e.target.value) } : f)}
+                  >
+                    {Array.from({ length: 11 }, (_, i) => i + 2).map(num => (
+                      <option key={num} value={num}>{num}x</option>
+                    ))}
+                  </select>
+                </div>
+                
+                {/* Preview de Parcela */}
+                {form.amount && parseToCents(form.amount) ? (
+                  <div className="p-3 rounded-lg bg-accent-pink/10 border border-accent-pink/20">
+                    <p className="text-xs text-accent-pink text-center font-medium">
+                      Serão registradas {form.installmentCount || 2} parcelas de {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((parseToCents(form.amount) || 0) / (form.installmentCount || 2) / 100)}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* CAMPOS ESPECÍFICOS DE DESPESA */}
         {form.type === "expense" && (
@@ -232,38 +311,40 @@ export const AddExpensePage: React.FC = () => {
             </div>
 
             {/* Como dividir */}
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium text-text-secondary">
-                Como dividir?
-              </p>
-              <div className="flex gap-2 flex-wrap">
-                {(["50/50", "100% Arthur", "100% Zara"] as SplitType[]).map((type) => {
-                  const labels: Record<SplitType, string> = {
-                    "50/50": "⚖️ Meio a Meio",
-                    "100% Arthur": `${OWNER_EMOJI} Só ${OWNER_NAME}`,
-                    "100% Zara": `${PARTNER_EMOJI} Só ${PARTNER_NAME}`,
-                  };
-                  const isSelected = form.splitType === type;
-                  const colorClass =
-                    type === "50/50"
-                      ? "chip-selected-green"
-                      : type === "100% Arthur"
-                      ? "chip-selected-blue"
-                      : "chip-selected-pink";
+            {!form.isInstallment && (
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-medium text-text-secondary">
+                  Como dividir?
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  {(["50/50", "100% Arthur", "100% Zara"] as SplitType[]).map((type) => {
+                    const labels: Record<SplitType, string> = {
+                      "50/50": "⚖️ Meio a Meio",
+                      "100% Arthur": `${OWNER_EMOJI} Só ${OWNER_NAME}`,
+                      "100% Zara": `${PARTNER_EMOJI} Só ${PARTNER_NAME}`,
+                    };
+                    const isSelected = form.splitType === type;
+                    const colorClass =
+                      type === "50/50"
+                        ? "chip-selected-green"
+                        : type === "100% Arthur"
+                        ? "chip-selected-blue"
+                        : "chip-selected-pink";
 
-                  return (
-                    <button
-                      key={type}
-                      type="button"
-                      onClick={() => setForm((f) => f.type === "expense" ? { ...f, splitType: type } : f)}
-                      className={`chip text-xs ${isSelected ? colorClass : ""}`}
-                    >
-                      {labels[type]}
-                    </button>
-                  );
-                })}
+                    return (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => setForm((f) => f.type === "expense" ? { ...f, splitType: type } : f)}
+                        className={`chip text-xs ${isSelected ? colorClass : ""}`}
+                      >
+                        {labels[type]}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
           </>
         )}
 

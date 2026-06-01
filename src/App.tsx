@@ -9,6 +9,7 @@ import { MessagesPage } from "./pages/Messages";
 import { LoginPage } from "./pages/Login";
 import { NotificationProvider } from "./contexts/NotificationContext";
 import { Toaster } from "react-hot-toast";
+import { isFirebaseConfigured, firebaseConfigError } from "./lib/firebase";
 
 const LoadingScreen: React.FC = () => (
   <div className="flex flex-col items-center justify-center min-h-screen gap-6">
@@ -57,7 +58,7 @@ const AuthenticatedApp: React.FC = () => {
   );
 };
 
-const App: React.FC = () => {
+const MainApp: React.FC = () => {
   const { user, loading, error, isAuthorized } = useAuth();
 
   if (loading) return <LoadingScreen />;
@@ -65,6 +66,26 @@ const App: React.FC = () => {
   if (!user || !isAuthorized) return <LoginPage />;
 
   return <AuthenticatedApp />;
+};
+
+const App: React.FC = () => {
+  if (!isFirebaseConfigured) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4 px-8 bg-[#0D0D14] text-[#F0F0F8]">
+        <span className="text-5xl animate-soft-pulse">⚠️</span>
+        <p className="text-xl font-bold text-center">Configuração do Firebase Ausente</p>
+        <p className="text-sm text-text-secondary text-center max-w-md">
+          O projeto foi clonado com sucesso, mas você precisa configurar as credenciais do Firebase em um arquivo <code className="bg-[#1E1E2C] px-2 py-1 rounded text-[#E879A0]">.env</code> na raiz do projeto para que o app funcione localmente.
+        </p>
+        <div className="bg-[#16161F] border border-[#2A2A3E] p-4 rounded-2xl w-full max-w-md mt-2">
+          <p className="text-xs font-semibold text-[#F0F0F8] mb-2">Status:</p>
+          <code className="text-xs text-[#F87171] font-mono break-all">{firebaseConfigError}</code>
+        </div>
+      </div>
+    );
+  }
+
+  return <MainApp />;
 };
 
 export default App;
