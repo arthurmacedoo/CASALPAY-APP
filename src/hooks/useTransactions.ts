@@ -10,6 +10,8 @@ import {
   serverTimestamp,
   writeBatch,
   getDocs,
+  doc,
+  collection,
 } from "firebase/firestore";
 import type { Transaction, TransactionFormData } from "../types";
 import {
@@ -90,7 +92,7 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
         const count = data.installmentCount;
         const baseAmount = Math.floor(amountCents / count);
         const remainder = amountCents % count;
-        const groupId = crypto.randomUUID();
+        const groupId = doc(collection(db, "couples")).id;
 
         const [year, month, day] = data.date.split("-").map(Number);
         

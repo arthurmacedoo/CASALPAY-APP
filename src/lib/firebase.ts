@@ -74,8 +74,11 @@ export const getFirebaseMessaging = () => {
 // ID do casal — identificador (não é segredo, proteção real vem dos UIDs no Firestore)
 // O mesmo valor deve ser usado nos dois celulares via .env
 // ─────────────────────────────────────────────────────────────────────────────
-export const COUPLE_ID =
-  import.meta.env.VITE_COUPLE_ID || "arthur-namorada-2026";
+export const COUPLE_ID = import.meta.env.VITE_COUPLE_ID as string;
+
+if (!COUPLE_ID) {
+  console.error("ALERTA CRÍTICO: VITE_COUPLE_ID não configurado no .env");
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Referências Firestore

@@ -32,10 +32,15 @@ export const HomePage: React.FC = () => {
       // Fallback para iOS
       const el = document.createElement("textarea");
       el.value = text;
+      el.setAttribute("readonly", ""); 
+      el.style.position = "absolute";
+      el.style.left = "-9999px";       
+      
       document.body.appendChild(el);
       el.select();
       document.execCommand("copy");
       document.body.removeChild(el);
+      
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     }
@@ -133,12 +138,13 @@ export const HomePage: React.FC = () => {
         </div>
 
         {/* Botão de adicionar — só aparece quando há transações */}
-        {!loading && transactions.length > 0 && (
+        {transactions.length > 0 && (
           <Button
             id="btn-add-expense-home"
             fullWidth
             onClick={() => navigate("/add")}
             className="mt-2"
+            disabled={loading}
           >
             + Adicionar despesa
           </Button>
