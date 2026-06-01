@@ -22,18 +22,6 @@ A gestão financeira é um dos maiores desafios para casais. O DualPay resolve i
 
 ---
 
-## 🔮 Roadmap e Visão de Futuro (Para Comercialização)
-Este projeto está pronto para receber novas funcionalidades e se tornar um produto comercial robusto:
-
-- [ ] **Integração Open Finance:** Conexão com bancos para importar transações automaticamente.
-- [ ] **Categorização Inteligente:** Gráficos e categorias (Mercado, Lazer, Contas) para o casal entender onde estão gastando mais.
-- [ ] **Metas Conjuntas:** Criação de caixinhas para viagens, casamento, ou móveis novos com acompanhamento de progresso.
-- [ ] **Notificações Push:** Alertas sobre vencimentos e lembretes amigáveis para acertos financeiros ("O fechamento do mês chegou!").
-- [ ] **Multicasais / Família:** Expansão para dividir contas em repúblicas, viagens com amigos ou famílias.
-- [ ] **Exportação em PDF/Excel:** Para auditorias e relatórios de fim de ano.
-
----
-
 ## 🛠️ Tecnologias Utilizadas
 
 - **Frontend:** React + TypeScript
