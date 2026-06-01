@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useMemo } from "react";
-import { getCurrentMonthKey } from "../lib/formatters";
+
 
 interface MonthSelectorProps {
   selectedMonth: string;

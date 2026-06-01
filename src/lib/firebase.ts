@@ -16,6 +16,7 @@ import { getMessaging } from "firebase/messaging";
 // ─────────────────────────────────────────────────────────────────────────────
 // Configuração do Firebase — variáveis no arquivo .env
 // ─────────────────────────────────────────────────────────────────────────────
+export let app: any = null;
 export let auth: any = null;
 export let db: any = null;
 export let isFirebaseConfigured = false;
@@ -39,7 +40,7 @@ if (missingKeys.length > 0) {
   firebaseConfigError = `Variáveis de ambiente ausentes: ${missingKeys.join(", ")}`;
 } else {
   try {
-    const app = initializeApp(firebaseConfig);
+    app = initializeApp(firebaseConfig);
     auth = initializeAuth(app, {
       persistence: [
         indexedDBLocalPersistence,

@@ -11,7 +11,7 @@ import { Button } from "../components/ui/Button";
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
   const currentMonth = getCurrentMonthKey();
-  const { transactions, loading, error, deleteTransaction } = useTransactions(currentMonth);
+  const { transactions, loading, error } = useTransactions(currentMonth);
   const [copied, setCopied] = useState(false);
 
   const balance = useMemo(

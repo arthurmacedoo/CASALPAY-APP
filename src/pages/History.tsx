@@ -9,7 +9,6 @@ import {
 } from "../lib/formatters";
 import { TransactionItem } from "../components/TransactionItem";
 import { MonthSelector } from "../components/MonthSelector";
-import { Input } from "../components/ui/Input";
 import type { Transaction } from "../types";
 
 export const HistoryPage: React.FC = () => {
