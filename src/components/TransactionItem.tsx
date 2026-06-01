@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import type { Transaction, ExpenseTransaction, SettlementTransaction } from "../types";
+import { createPortal } from "react-dom";
 import { formatBRL, formatDateBR, formatSplitType } from "../lib/formatters";
 import { calculateExpenseDebt, calculateSettlementEffect } from "../lib/calculations";
 import { OWNER_NAME, PARTNER_NAME, OWNER_EMOJI, PARTNER_EMOJI } from "../constants/couple";
@@ -68,12 +69,14 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
           </p>
           {showActions && (
             <div className="flex gap-2 mt-2 justify-end">
-              <button
-                onClick={() => onEdit?.(transaction)}
-                className="text-xs text-text-muted hover:text-accent-blue transition-colors px-2 py-1 rounded-lg hover:bg-accent-blue/10"
-              >
-                Editar
-              </button>
+              {!(isExpense && (transaction as ExpenseTransaction).groupId) && (
+                <button
+                  onClick={() => onEdit?.(transaction)}
+                  className="text-xs text-text-muted hover:text-accent-blue transition-colors px-2 py-1 rounded-lg hover:bg-accent-blue/10"
+                >
+                  Editar
+                </button>
+              )}
               <button
                 onClick={handleDeleteClick}
                 className="text-xs text-text-muted hover:text-accent-red hover:bg-accent-red/10 px-2 py-1 rounded-lg transition-colors"
@@ -85,8 +88,8 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
         </div>
       </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fade-in-up">
+      {isModalOpen && createPortal(
+        <div style={{ zIndex: 9999 }} className="fixed inset-0 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fade-in-up">
           <div className="bg-bg-elevated p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-border">
             <h3 className="text-lg font-bold text-text-primary mb-2">Excluir despesa</h3>
             <p className="text-sm text-text-secondary mb-6 leading-relaxed">
@@ -110,7 +113,8 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

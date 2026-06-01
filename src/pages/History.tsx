@@ -9,13 +9,22 @@ import {
 } from "../lib/formatters";
 import { TransactionItem } from "../components/TransactionItem";
 import { MonthSelector } from "../components/MonthSelector";
+import { Input } from "../components/ui/Input";
 import type { Transaction } from "../types";
 
 export const HistoryPage: React.FC = () => {
   const navigate = useNavigate();
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthKey());
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const { transactions, loading, error, deleteTransaction } =
     useTransactions(selectedMonth);
+
+  const filteredTransactions = useMemo(() => {
+    if (!searchTerm.trim()) return transactions;
+    const lower = searchTerm.toLowerCase();
+    return transactions.filter(t => t.description.toLowerCase().includes(lower));
+  }, [transactions, searchTerm]);
 
   const balance = useMemo(
     () => calculateBalance(transactions),
@@ -34,14 +43,42 @@ export const HistoryPage: React.FC = () => {
 
   return (
     <main className="flex-1 overflow-y-auto pb-24">
-      {/* Header */}
-      <div className="px-5 pt-14 pb-4">
-        <p className="text-text-muted text-sm font-medium">Todas as despesas</p>
-        <h1 className="text-2xl font-bold text-text-primary mt-1">Histórico</h1>
+      {/* Header com Busca Expansível */}
+      <div className="px-5 pt-14 pb-4 flex items-center justify-between min-h-[90px]">
+        {!isSearchExpanded ? (
+          <div className="animate-fade-in-up flex-1">
+            <p className="text-text-muted text-sm font-medium">Todas as despesas</p>
+            <h1 className="text-2xl font-bold text-text-primary mt-1">Histórico</h1>
+          </div>
+        ) : (
+          <div className="animate-fade-in-up flex-1 mr-3 relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm opacity-70">🔍</span>
+            <input 
+              autoFocus
+              type="text" 
+              placeholder="Buscar despesa..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-bg-elevated border border-border rounded-full pl-9 pr-4 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-pink transition-colors"
+            />
+          </div>
+        )}
+        
+        <button 
+          onClick={() => {
+            if (isSearchExpanded) {
+              setSearchTerm("");
+            }
+            setIsSearchExpanded(!isSearchExpanded);
+          }}
+          className="shrink-0 w-10 h-10 rounded-full bg-bg-elevated border border-border flex items-center justify-center text-text-secondary hover:text-accent-pink hover:border-accent-pink transition-colors"
+        >
+          {isSearchExpanded ? "✕" : "🔍"}
+        </button>
       </div>
 
       {/* Seletor de mês */}
-      <div className="px-5 mb-5">
+      <div className="px-5 mb-4">
         <MonthSelector
           selectedMonth={selectedMonth}
           onChange={setSelectedMonth}
@@ -131,9 +168,19 @@ export const HistoryPage: React.FC = () => {
               Selecione outro mês ou adicione uma nova despesa.
             </p>
           </div>
+        ) : filteredTransactions.length === 0 && searchTerm ? (
+          <div className="card flex flex-col items-center py-12 gap-3 text-center">
+            <span className="text-4xl">🔍</span>
+            <p className="text-text-secondary font-medium">
+              Nenhum resultado encontrado
+            </p>
+            <p className="text-text-muted text-sm max-w-xs">
+              Não encontramos despesas para "{searchTerm}".
+            </p>
+          </div>
         ) : (
           <div className="flex flex-col gap-3">
-            {transactions.map((t) => (
+            {filteredTransactions.map((t) => (
               <TransactionItem
                 key={t.id}
                 transaction={t}

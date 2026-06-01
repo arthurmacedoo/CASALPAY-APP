@@ -126,9 +126,6 @@ export const HomePage: React.FC = () => {
                 <TransactionItem
                   key={t.id}
                   transaction={t}
-                  showActions
-                  onEdit={(tx) => navigate("/add", { state: { transaction: tx } })}
-                  onDelete={(tx) => deleteTransaction(tx)}
                 />
               ))}
             </div>

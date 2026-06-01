@@ -9,7 +9,7 @@ import type {
   SettlementFormData,
 } from "../types";
 import { parseToCents, getMonthKey } from "../lib/calculations";
-import { getTodayDateString, getCurrentMonthKey } from "../lib/formatters";
+import { getTodayDateString, getCurrentMonthKey, formatBRL } from "../lib/formatters";
 import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
 import { OWNER_NAME, PARTNER_NAME, OWNER_EMOJI, PARTNER_EMOJI } from "../constants/couple";
@@ -274,9 +274,26 @@ export const AddExpensePage: React.FC = () => {
                 {/* Preview de Parcela */}
                 {form.amount && parseToCents(form.amount) ? (
                   <div className="p-3 rounded-lg bg-accent-pink/10 border border-accent-pink/20">
-                    <p className="text-xs text-accent-pink text-center font-medium">
-                      Serão registradas {form.installmentCount || 2} parcelas de {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((parseToCents(form.amount) || 0) / (form.installmentCount || 2) / 100)}
-                    </p>
+                    {(() => {
+                      const totalCents = parseToCents(form.amount) || 0;
+                      const count = form.installmentCount || 2;
+                      const baseAmount = Math.floor(totalCents / count);
+                      const remainder = totalCents % count;
+                      
+                      if (remainder > 0) {
+                        return (
+                          <p className="text-xs text-accent-pink text-center font-medium">
+                            A 1ª parcela será de {formatBRL(baseAmount + remainder)} e as demais {formatBRL(baseAmount)}.
+                          </p>
+                        );
+                      }
+                      
+                      return (
+                        <p className="text-xs text-accent-pink text-center font-medium">
+                          Serão registradas {count} parcelas de {formatBRL(baseAmount)}.
+                        </p>
+                      );
+                    })()}
                   </div>
                 ) : null}
               </div>

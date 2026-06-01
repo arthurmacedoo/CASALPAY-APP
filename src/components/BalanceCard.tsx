@@ -2,6 +2,7 @@ import React from "react";
 import type { BalanceSummary } from "../types";
 import { formatBRL, formatMonthLabel } from "../lib/formatters";
 import { useAuth } from "../hooks/useAuth";
+import { OWNER_EMOJI, PARTNER_EMOJI } from "../constants/couple";
 
 interface BalanceCardProps {
   balance: BalanceSummary;
@@ -70,7 +71,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
           </p>
         </div>
         <div className="w-10 h-10 rounded-2xl bg-bg-elevated flex items-center justify-center text-xl">
-          {isEven ? "🝻" : zaraOwes ? "💬" : "🚪"}
+          {isEven ? "✅" : zaraOwes ? PARTNER_EMOJI : OWNER_EMOJI}
         </div>
       </div>
 
