@@ -61,11 +61,10 @@ export function calculateBalance(transactions: Transaction[]): BalanceSummary {
   // Saldo bruto de despesas (sem settlements)
   let rawDebt = 0; // positivo = Zara deve; negativo = Arthur deve
 
-  for (const t of transactions) {
-    if (t.type === "settlement" && t.pixDestination === "zara_card") {
-      continue; // Ignorar Pixes destinados à Fatura Zara na contabilidade do Dia a Dia
-    }
+  // Passo 2: Ignora qualquer transação de acerto que seja destinada à Fatura Zara
+  const validTransactions = transactions.filter(t => t.pixDestination !== 'zara_card');
 
+  for (const t of validTransactions) {
     if (t.type === "expense") {
       expenseCount++;
       if (t.paidBy === "Arthur") totalExpensesByArthur += t.amount;

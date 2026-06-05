@@ -20,28 +20,35 @@ export const HistoryPage: React.FC = () => {
   const { transactions, loading, error, deleteTransaction } =
     useTransactions(selectedMonth);
 
-  // Matrizes de transações separadas
+  // Passo 3: Arrumar as Abas no Histórico
   const sharedTransactions = useMemo(() => {
     return transactions.filter(t => {
-      // Ignora Pix para Fatura Zara
-      if (t.type === "settlement" && t.pixDestination === "zara_card") return false;
-      // Ignora Despesas 100% Zara pagas pela Zara (vão apenas para a aba dela)
-      if (t.type === "expense" && t.paidBy === "Zara" && t.splitType === "100% Zara") return false;
-      return true;
+      // Ignora Fatura da Zara
+      const isZaraCardExpense = t.splitType === '100% Zara' && t.paidBy === 'Zara';
+      // Ignora Pix para a Fatura da Zara
+      const isZaraCardPix = t.pixDestination === 'zara_card';
+      return !isZaraCardExpense && !isZaraCardPix;
     });
   }, [transactions]);
 
   const zaraTransactions = useMemo(() => {
-    return transactions.filter(t => 
-      (t.type === "expense" && t.paidBy === "Zara" && t.splitType === "100% Zara") ||
-      (t.type === "settlement" && t.pixDestination === "zara_card")
-    );
+    return transactions.filter(t => {
+      const isZaraCardExpense = t.splitType === '100% Zara' && t.paidBy === 'Zara';
+      const isZaraCardPix = t.pixDestination === 'zara_card';
+      return isZaraCardExpense || isZaraCardPix;
+    });
   }, [transactions]);
 
+  // Passo 4: Matemática do Total da Fatura
   const zaraInvoiceTotal = useMemo(() => {
     return zaraTransactions.reduce((acc, t) => {
-      if (t.type === "expense") return acc + t.amount;
-      if (t.type === "settlement") return acc - t.amount;
+      if (t.type === 'expense') return acc + t.amount;
+      if (t.type === 'settlement') {
+         // Se a Zara enviou o Pix pro Arthur, abate a fatura dela
+         if (t.from === 'Zara') return acc - t.amount;
+         // Se o Arthur enviou pra ela, aumenta a dívida (caso raro)
+         if (t.from === 'Arthur') return acc + t.amount;
+      }
       return acc;
     }, 0);
   }, [zaraTransactions]);
