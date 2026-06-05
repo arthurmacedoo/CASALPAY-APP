@@ -62,7 +62,9 @@ export function calculateBalance(transactions: Transaction[]): BalanceSummary {
   let rawDebt = 0; // positivo = Zara deve; negativo = Arthur deve
 
   // Passo 2: Ignora qualquer transação de acerto que seja destinada à Fatura Zara
-  const validTransactions = transactions.filter(t => t.pixDestination !== 'zara_card');
+  const validTransactions = transactions.filter((t) => {
+    return !(t.type === "settlement" && t.pixDestination === "zara_card");
+  });
 
   for (const t of validTransactions) {
     if (t.type === "expense") {

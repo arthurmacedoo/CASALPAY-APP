@@ -368,9 +368,11 @@ export const AddExpensePage: React.FC = () => {
 
         {/* CAMPOS ESPECÍFICOS DE PIX/ACERTO */}
         {form.type === "settlement" && (
-          <div className="flex flex-col gap-4 bg-bg-elevated p-4 rounded-2xl border border-border">
-            <div>
-              <p className="text-sm font-medium text-text-secondary mb-2">Quem enviou o Pix?</p>
+          <>
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium text-text-secondary">
+                Quem enviou o Pix?
+              </p>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -389,26 +391,28 @@ export const AddExpensePage: React.FC = () => {
               </div>
             </div>
 
-            <div>
-              <p className="text-sm font-medium text-text-secondary mb-2">Destino do Acerto:</p>
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium text-text-secondary">
+                Destino do Acerto:
+              </p>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setForm((f) => f.type === "settlement" ? { ...f, pixDestination: "shared" } : f)}
                   className={`chip ${(!form.pixDestination || form.pixDestination === "shared") ? "chip-selected-green" : ""}`}
                 >
-                  🛒 Dia a Dia
+                  🛒 Gastos do dia a dia
                 </button>
                 <button
                   type="button"
                   onClick={() => setForm((f) => f.type === "settlement" ? { ...f, pixDestination: "zara_card" } : f)}
                   className={`chip ${form.pixDestination === "zara_card" ? "chip-selected-purple" : ""}`}
                 >
-                  💳 Fatura Zara
+                  💳 Abater Fatura Zara
                 </button>
               </div>
             </div>
-          </div>
+          </>
         )}
 
         {/* Data */}

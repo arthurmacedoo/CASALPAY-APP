@@ -11,6 +11,18 @@ import { TransactionItem } from "../components/TransactionItem";
 import { MonthSelector } from "../components/MonthSelector";
 import type { Transaction } from "../types";
 
+function isZaraCardPix(t: Transaction): boolean {
+  return t.type === "settlement" && t.pixDestination === "zara_card";
+}
+
+function isZaraCardExpense(t: Transaction): boolean {
+  return t.type === "expense" && t.splitType === "100% Zara" && t.paidBy === "Zara";
+}
+
+function isZaraInvoiceTransaction(t: Transaction): boolean {
+  return isZaraCardPix(t) || isZaraCardExpense(t);
+}
+
 export const HistoryPage: React.FC = () => {
   const navigate = useNavigate();
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthKey());
@@ -22,21 +34,11 @@ export const HistoryPage: React.FC = () => {
 
   // Passo 3: Arrumar as Abas no Histórico
   const sharedTransactions = useMemo(() => {
-    return transactions.filter(t => {
-      // Ignora Fatura da Zara
-      const isZaraCardExpense = t.splitType === '100% Zara' && t.paidBy === 'Zara';
-      // Ignora Pix para a Fatura da Zara
-      const isZaraCardPix = t.pixDestination === 'zara_card';
-      return !isZaraCardExpense && !isZaraCardPix;
-    });
+    return transactions.filter(t => !isZaraInvoiceTransaction(t));
   }, [transactions]);
 
   const zaraTransactions = useMemo(() => {
-    return transactions.filter(t => {
-      const isZaraCardExpense = t.splitType === '100% Zara' && t.paidBy === 'Zara';
-      const isZaraCardPix = t.pixDestination === 'zara_card';
-      return isZaraCardExpense || isZaraCardPix;
-    });
+    return transactions.filter(t => isZaraInvoiceTransaction(t));
   }, [transactions]);
 
   // Passo 4: Matemática do Total da Fatura
