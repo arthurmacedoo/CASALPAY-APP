@@ -146,7 +146,7 @@ export const HistoryPage: React.FC = () => {
       </div>
 
       {/* Saldo líquido do mês (apenas se estiver na aba Dia a Dia) */}
-      {activeTab === "shared" && !loading && sharedTransactions.length > 0 && (
+      {activeTab === "shared" && !loading && (
         <div className="px-5 mb-4">
           <div className="card">
             <p className="text-sm text-text-muted mb-3 font-medium">
@@ -186,7 +186,7 @@ export const HistoryPage: React.FC = () => {
       )}
 
       {/* Resumo da Fatura Zara (apenas se estiver na aba zara) */}
-      {activeTab === "zara" && !loading && zaraTransactions.length > 0 && (
+      {activeTab === "zara" && !loading && (
         <div className="px-5 mb-4 animate-fade-in-up">
           <div className="card text-center">
             <p className="text-sm text-text-muted mb-1 font-medium">
