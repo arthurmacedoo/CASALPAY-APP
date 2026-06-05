@@ -146,6 +146,7 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
             type: "settlement",
             from: data.from,
             to: data.to,
+            pixDestination: data.pixDestination || "shared",
           };
         }
 
@@ -179,6 +180,7 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
           type: "settlement",
           from: data.from,
           to: data.to,
+          pixDestination: data.pixDestination || "shared",
         };
       }
 
