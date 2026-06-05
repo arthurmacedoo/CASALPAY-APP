@@ -16,18 +16,46 @@ export const HistoryPage: React.FC = () => {
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthKey());
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState<"shared" | "zara">("shared");
   const { transactions, loading, error, deleteTransaction } =
     useTransactions(selectedMonth);
 
+  // Matrizes de transações separadas
+  const sharedTransactions = useMemo(() => {
+    return transactions.filter(t => {
+      // Ignora Pix para Fatura Zara
+      if (t.type === "settlement" && t.pixDestination === "zara_card") return false;
+      // Ignora Despesas 100% Zara pagas pela Zara (vão apenas para a aba dela)
+      if (t.type === "expense" && t.paidBy === "Zara" && t.splitType === "100% Zara") return false;
+      return true;
+    });
+  }, [transactions]);
+
+  const zaraTransactions = useMemo(() => {
+    return transactions.filter(t => 
+      (t.type === "expense" && t.paidBy === "Zara" && t.splitType === "100% Zara") ||
+      (t.type === "settlement" && t.pixDestination === "zara_card")
+    );
+  }, [transactions]);
+
+  const zaraInvoiceTotal = useMemo(() => {
+    return zaraTransactions.reduce((acc, t) => {
+      if (t.type === "expense") return acc + t.amount;
+      if (t.type === "settlement") return acc - t.amount;
+      return acc;
+    }, 0);
+  }, [zaraTransactions]);
+
   const filteredTransactions = useMemo(() => {
-    if (!searchTerm.trim()) return transactions;
+    const source = activeTab === "shared" ? sharedTransactions : zaraTransactions;
+    if (!searchTerm.trim()) return source;
     const lower = searchTerm.toLowerCase();
-    return transactions.filter(t => t.description.toLowerCase().includes(lower));
-  }, [transactions, searchTerm]);
+    return source.filter(t => t.description.toLowerCase().includes(lower));
+  }, [sharedTransactions, zaraTransactions, activeTab, searchTerm]);
 
   const balance = useMemo(
-    () => calculateBalance(transactions),
-    [transactions]
+    () => calculateBalance(sharedTransactions),
+    [sharedTransactions]
   );
 
   const handleEdit = (t: Transaction) => {
@@ -84,43 +112,59 @@ export const HistoryPage: React.FC = () => {
         />
       </div>
 
-      {/* Resumo do mês selecionado */}
-      {!loading && transactions.length > 0 && (
+      {/* Abas de Navegação (Posicionadas no topo) */}
+      <div className="px-5 mb-4">
+        <div className="relative flex bg-bg-elevated rounded-xl p-1 border border-border">
+          {/* Sliding Pill Indicator */}
+          <div
+            className={`absolute top-1 bottom-1 w-[calc(50%-0.25rem)] rounded-lg transition-all duration-300 ease-in-out shadow-sm ${
+              activeTab === "shared" ? "translate-x-0 bg-accent-pink" : "translate-x-full bg-[#A855F7]"
+            }`}
+          />
+          
+          <button
+            onClick={() => setActiveTab("shared")}
+            className={`relative z-10 flex-1 py-2.5 text-sm font-medium rounded-lg transition-colors duration-300 ${
+              activeTab === "shared"
+                ? "text-white"
+                : "text-text-muted hover:text-text-secondary"
+            }`}
+          >
+            Nossos Gastos
+          </button>
+          <button
+            onClick={() => setActiveTab("zara")}
+            className={`relative z-10 flex-1 py-2.5 text-sm font-medium rounded-lg transition-colors duration-300 ${
+              activeTab === "zara"
+                ? "text-white"
+                : "text-text-muted hover:text-text-secondary"
+            }`}
+          >
+            Fatura Zara
+          </button>
+        </div>
+      </div>
+
+      {/* Saldo líquido do mês (apenas se estiver na aba Dia a Dia) */}
+      {activeTab === "shared" && !loading && sharedTransactions.length > 0 && (
         <div className="px-5 mb-4">
           <div className="card">
             <p className="text-sm text-text-muted mb-3 font-medium">
               Resumo de {monthLabel}
             </p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-bg-elevated rounded-2xl p-3">
-                <p className="text-xs text-text-muted">Despesas do mês</p>
-                <p className="text-base font-bold text-text-primary tabular-nums mt-0.5">
-                  {formatBRL(balance.totalExpenses)}
-                </p>
-              </div>
-              <div className="bg-bg-elevated rounded-2xl p-3">
-                <p className="text-xs text-text-muted">Qtd de compras</p>
-                <p className="text-base font-bold text-text-primary mt-0.5">
-                  {balance.expenseCount}
-                </p>
-              </div>
-              <div className="bg-bg-elevated rounded-2xl p-3">
-                <p className="text-xs text-text-muted">Arthur pagou</p>
-                <p className="text-base font-bold text-accent-blue tabular-nums mt-0.5">
-                  {formatBRL(balance.totalExpensesByArthur)}
-                </p>
-              </div>
-              <div className="bg-bg-elevated rounded-2xl p-3">
-                <p className="text-xs text-text-muted">Zara pagou</p>
-                <p className="text-sm font-semibold text-accent-pink">
-                  {formatBRL(balance.totalExpensesByZara)}
-                </p>
-              </div>
+            
+            <div className="bg-bg-elevated rounded-2xl p-5 text-center border border-border mb-3">
+              <p className="text-xs text-text-muted mb-1 font-medium">Total Compartilhado</p>
+              <p className="text-3xl font-bold text-text-primary tabular-nums">
+                {formatBRL(balance.totalExpenses)}
+              </p>
+              <p className="text-xs text-text-muted mt-1">
+                em {balance.expenseCount} compras
+              </p>
             </div>
 
-            {/* Saldo líquido do mês */}
             <div
-              className={`mt-3 rounded-2xl p-3 text-center border ${
+              className={`rounded-2xl p-3 text-center border ${
                 balance.netBalance === 0
                   ? "bg-accent-green/10 border-accent-green/30"
                   : balance.netBalance > 0
@@ -140,6 +184,25 @@ export const HistoryPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Resumo da Fatura Zara (apenas se estiver na aba zara) */}
+      {activeTab === "zara" && !loading && zaraTransactions.length > 0 && (
+        <div className="px-5 mb-4 animate-fade-in-up">
+          <div className="card text-center">
+            <p className="text-sm text-text-muted mb-1 font-medium">
+              Total da Fatura Zara
+            </p>
+            <p className="text-3xl font-bold text-text-primary tabular-nums">
+              {formatBRL(Math.max(0, zaraInvoiceTotal))}
+            </p>
+            {zaraInvoiceTotal < 0 && (
+              <p className="text-xs text-accent-green mt-1">Crédito de {formatBRL(Math.abs(zaraInvoiceTotal))} para a próxima fatura</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* As Abas foram movidas para o topo */}
 
       {/* Lista de transações */}
       <div className="px-5">

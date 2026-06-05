@@ -44,6 +44,8 @@ export interface SettlementTransaction {
   coupleId: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  /** Destino do Pix: abater do dia a dia (shared) ou abater da fatura Zara (zara_card) */
+  pixDestination?: "shared" | "zara_card";
 }
 
 // ─── Union type geral ─────────────────────────────────────────────────────────
@@ -70,6 +72,7 @@ export interface SettlementFormData {
   from: Person;
   to: Person;
   date: string;
+  pixDestination?: "shared" | "zara_card";
 }
 
 export type TransactionFormData = ExpenseFormData | SettlementFormData;

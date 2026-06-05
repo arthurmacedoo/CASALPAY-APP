@@ -20,6 +20,7 @@ export default {
         accent: {
           pink: "#E879A0",    // Rosa — usada para Namorada
           blue: "#7B8FFF",    // Azul — usada para Arthur
+          purple: "#A855F7",  // Roxo — usada para Fatura Zara
           green: "#4ADE80",   // Verde — zerado
           red: "#F87171",     // Erro
         },

@@ -14,12 +14,22 @@ export const HomePage: React.FC = () => {
   const { transactions, loading, error } = useTransactions(currentMonth);
   const [copied, setCopied] = useState(false);
 
+  const sharedTransactions = useMemo(() => {
+    return transactions.filter(t => {
+      // Ignora Pix para Fatura Zara
+      if (t.type === "settlement" && t.pixDestination === "zara_card") return false;
+      // Ignora Despesas 100% Zara pagas pela Zara
+      if (t.type === "expense" && t.paidBy === "Zara" && t.splitType === "100% Zara") return false;
+      return true;
+    });
+  }, [transactions]);
+
   const balance = useMemo(
-    () => calculateBalance(transactions),
-    [transactions]
+    () => calculateBalance(sharedTransactions),
+    [sharedTransactions]
   );
 
-  const recentTransactions = transactions.slice(0, 5);
+  const recentTransactions = sharedTransactions.slice(0, 5);
 
   const handleCopyPix = async () => {
     const monthLabel = formatMonthLabel(currentMonth);

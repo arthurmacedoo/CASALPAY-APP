@@ -32,6 +32,7 @@ const initialSettlementData: SettlementFormData = {
   from: "Zara",
   to: "Arthur",
   date: getTodayDateString(),
+  pixDestination: "shared",
 };
 
 export const AddExpensePage: React.FC = () => {
@@ -384,6 +385,26 @@ export const AddExpensePage: React.FC = () => {
                   className={`chip ${form.from === PARTNER_NAME ? "chip-selected-pink" : ""}`}
                 >
                   {PARTNER_EMOJI} {PARTNER_NAME}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-text-secondary mb-2">Destino do Acerto:</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => f.type === "settlement" ? { ...f, pixDestination: "shared" } : f)}
+                  className={`chip ${(!form.pixDestination || form.pixDestination === "shared") ? "chip-selected-green" : ""}`}
+                >
+                  🛒 Dia a Dia
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => f.type === "settlement" ? { ...f, pixDestination: "zara_card" } : f)}
+                  className={`chip ${form.pixDestination === "zara_card" ? "chip-selected-purple" : ""}`}
+                >
+                  💳 Fatura Zara
                 </button>
               </div>
             </div>
