@@ -2,6 +2,8 @@ import React, { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useTransactions } from "../hooks/useTransactions";
+import { deleteDoc } from "firebase/firestore";
+import { transactionDocRef } from "../lib/firebase";
 import { usePendingTransactions } from "../hooks/usePendingTransactions";
 import { calculateBalance, generatePixSummary } from "../lib/calculations";
 import { getCurrentMonthKey, formatMonthLabel, formatBRL, formatDateBR } from "../lib/formatters";
@@ -116,10 +118,16 @@ export const HomePage: React.FC = () => {
     return (sessionStorage.getItem("casalpay_viewMode") as ViewMode) || "shared";
   });
 
-  // Atualiza a sessionStorage sempre que a aba mudar
+  // Atualiza a sessionStorage sempre que a aba mudar, e escuta o BottomNav
   React.useEffect(() => {
     sessionStorage.setItem("casalpay_viewMode", viewMode);
   }, [viewMode]);
+
+  React.useEffect(() => {
+    const handleHomeClick = () => setViewMode("shared");
+    window.addEventListener("casalpay_home_clicked", handleHomeClick);
+    return () => window.removeEventListener("casalpay_home_clicked", handleHomeClick);
+  }, []);
 
   // ── Filtragem das abas compartilhada e fatura ────────────────────────────────
   const sharedTransactions = useMemo(() => {
@@ -189,7 +197,11 @@ export const HomePage: React.FC = () => {
   };
 
   const handleDeletePending = async (t: Transaction) => {
-    await deleteTransaction(t);
+    try {
+      await deleteDoc(transactionDocRef(t.id));
+    } catch (err) {
+      console.error("Erro ao excluir despesa pendente", err);
+    }
   };
 
   if (error) {

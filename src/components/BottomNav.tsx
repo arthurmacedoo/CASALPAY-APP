@@ -100,6 +100,11 @@ export const BottomNav: React.FC = () => {
               id={`nav-${item.to.replace("/", "") || "home"}`}
               className="flex-1 relative z-10"
               aria-current={isActive ? "page" : undefined}
+              onClick={() => {
+                if (item.to === "/") {
+                  window.dispatchEvent(new Event("casalpay_home_clicked"));
+                }
+              }}
             >
               <div
                 className={`flex flex-col items-center gap-1 py-1.5 transition-colors duration-200 ${
