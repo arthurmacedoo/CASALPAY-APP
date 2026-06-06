@@ -110,7 +110,7 @@ export const HomePage: React.FC = () => {
   const navigate = useNavigate();
   const currentMonth = getCurrentMonthKey();
 
-  const { transactions, loading, error, deleteTransaction } = useTransactions(currentMonth);
+  const { transactions, loading, error } = useTransactions(currentMonth);
   const { pendingTransactions, pendingCount, loading: pendingLoading } = usePendingTransactions();
 
   const [copied, setCopied] = useState(false);
