@@ -37,7 +37,7 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="text-lg">
-              {isExpense ? (transaction.paidBy === OWNER_NAME ? OWNER_EMOJI : PARTNER_EMOJI) : "💸"}
+              {isExpense ? (transaction.paidBy === "owner" ? OWNER_EMOJI : PARTNER_EMOJI) : "💸"}
             </span>
             <p className="text-base font-semibold text-text-primary truncate">
               {transaction.description || (isExpense ? "Compra" : "Pix de Acerto")}
@@ -127,7 +127,7 @@ const ExpenseDetails: React.FC<{ transaction: ExpenseTransaction }> = ({ transac
   const isNobodyOwes = debt === 0;
   const zaraOwes = debt > 0;
 
-  const paidByColor = transaction.paidBy === OWNER_NAME ? "text-accent-blue" : "text-accent-pink";
+  const paidByColor = transaction.paidBy === "owner" ? "text-accent-blue" : "text-accent-pink";
   const debtColor = isNobodyOwes ? "text-text-muted" : zaraOwes ? "text-accent-pink" : "text-accent-blue";
   
   const debtText = isNobodyOwes
@@ -139,7 +139,7 @@ const ExpenseDetails: React.FC<{ transaction: ExpenseTransaction }> = ({ transac
   return (
     <>
       <span className={`text-xs font-medium ${paidByColor}`}>
-        Pagou: {transaction.paidBy}
+        Pagou: {transaction.paidBy === "owner" ? OWNER_NAME : PARTNER_NAME}
       </span>
       <span className="text-text-muted text-xs">·</span>
       <span className={`text-xs font-medium ${debtColor}`}>
@@ -154,7 +154,7 @@ const SettlementDetails: React.FC<{ transaction: SettlementTransaction }> = ({ t
   // effect positivo = reduz dívida da Zara
   // effect negativo = reduz dívida do Arthur
   
-  const fromColor = transaction.from === OWNER_NAME ? "text-accent-blue" : "text-accent-pink";
+  const fromColor = transaction.from === "owner" ? "text-accent-blue" : "text-accent-pink";
   const effectText = effect > 0 
     ? `Reduziu dívida dela` 
     : `Reduziu dívida dele`;
@@ -162,7 +162,7 @@ const SettlementDetails: React.FC<{ transaction: SettlementTransaction }> = ({ t
   return (
     <>
       <span className={`text-xs font-medium ${fromColor}`}>
-        Enviou: {transaction.from}
+        Enviou: {transaction.from === "owner" ? OWNER_NAME : PARTNER_NAME}
       </span>
       <span className="text-text-muted text-xs">·</span>
       <span className="text-xs font-medium text-violet-400">

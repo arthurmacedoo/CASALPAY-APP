@@ -10,17 +10,17 @@ export function calculateExpenseDebt(t: ExpenseTransaction): number {
 
   if (splitType === "50/50") {
     const half = Math.floor(amount / 2);
-    return paidBy === "Arthur" ? half : -half;
+    return paidBy === "owner" ? half : -half;
   }
 
-  if (paidBy === "Arthur") {
-    if (splitType === "100% Zara") return amount;
-    if (splitType === "100% Arthur") return 0;
+  if (paidBy === "owner") {
+    if (splitType === "100% partner") return amount;
+    if (splitType === "100% owner") return 0;
   }
 
-  if (paidBy === "Zara") {
-    if (splitType === "100% Arthur") return -amount;
-    if (splitType === "100% Zara") return 0;
+  if (paidBy === "partner") {
+    if (splitType === "100% owner") return -amount;
+    if (splitType === "100% partner") return 0;
   }
 
   return 0;
@@ -28,8 +28,8 @@ export function calculateExpenseDebt(t: ExpenseTransaction): number {
 
 export function calculateSettlementEffect(t: SettlementTransaction): number {
   const { amount, from } = t;
-  if (from === "Zara") return -amount;
-  if (from === "Arthur") return amount;
+  if (from === "partner") return -amount;
+  if (from === "owner") return amount;
   return 0;
 }
 
@@ -49,12 +49,12 @@ export function calculateBalance(transactions: Transaction[]): BalanceSummary {
   for (const t of validTransactions) {
     if (t.type === "expense") {
       expenseCount++;
-      if (t.paidBy === "Arthur") totalExpensesByArthur += t.amount;
+      if (t.paidBy === "owner") totalExpensesByArthur += t.amount;
       else totalExpensesByZara += t.amount;
       rawDebt += calculateExpenseDebt(t);
     } else {
       settlementCount++;
-      if (t.from === "Arthur") totalSettledByArthur += t.amount;
+      if (t.from === "owner") totalSettledByArthur += t.amount;
       else totalSettledByZara += t.amount;
       rawDebt += calculateSettlementEffect(t);
     }

@@ -52,10 +52,24 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const docs: Transaction[] = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Transaction[];
+        const docs: Transaction[] = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data() as any;
+          // Tarefa 4.2: Mapeador de Retrocompatibilidade
+          if (data.paidBy === "Arthur") data.paidBy = "owner";
+          if (data.paidBy === "Zara") data.paidBy = "partner";
+          if (data.from === "Arthur") data.from = "owner";
+          if (data.from === "Zara") data.from = "partner";
+          if (data.to === "Arthur") data.to = "owner";
+          if (data.to === "Zara") data.to = "partner";
+          if (data.splitType === "100% Arthur") data.splitType = "100% owner";
+          if (data.splitType === "100% Zara") data.splitType = "100% partner";
+          
+          return {
+            id: docSnap.id,
+            ...data,
+          } as Transaction;
+        // Exclui pendentes das views shared/zara (geridas por usePendingTransactions)
+        }).filter((t) => !t.status || t.status === "confirmed");
         setTransactions(docs);
         setLoading(false);
       },
@@ -96,6 +110,8 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
 
         const [year, month, day] = data.date.split("-").map(Number);
         
+        const batch = writeBatch(db);
+        
         for (let i = 1; i <= count; i++) {
           const installmentAmount = i === 1 ? baseAmount + remainder : baseAmount;
           
@@ -109,6 +125,9 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
           const newDayStr = String(newDay).padStart(2, "0");
           const newDateStr = `${newYear}-${newMonthStr}-${newDayStr}`;
 
+          // Tarefa 2: Visibilidade da query
+          const visibility = (data.paidBy === "partner" && data.splitType === "100% partner") ? "personal" : "shared";
+
           const docData = {
             ...baseData,
             amount: installmentAmount,
@@ -120,14 +139,19 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
             installmentCount: count,
             currentInstallment: i,
             groupId: groupId,
-            originalAmount: amountCents
+            originalAmount: amountCents,
+            visibility: visibility,
           };
 
-          await addDoc(transactionsRef(), docData);
+          const newDocRef = doc(transactionsRef());
+          batch.set(newDocRef, docData);
         }
+        await batch.commit();
       } else {
         let docData;
         if (data.type === "expense") {
+          // Tarefa 2: Visibilidade
+          const visibility = (data.paidBy === "partner" && data.splitType === "100% partner") ? "personal" : "shared";
           docData = {
             ...baseData,
             amount: amountCents,
@@ -136,8 +160,10 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
             type: "expense",
             paidBy: data.paidBy,
             splitType: data.splitType,
+            visibility: visibility,
           };
         } else {
+          const visibility = data.pixDestination === "zara_card" ? "personal" : "shared";
           docData = {
             ...baseData,
             amount: amountCents,
@@ -147,6 +173,7 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
             from: data.from,
             to: data.to,
             pixDestination: data.pixDestination || "shared",
+            visibility: visibility,
           };
         }
 
@@ -168,19 +195,26 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
 
       let docData;
       if (data.type === "expense") {
+        const visibility = (data.paidBy === "partner" && data.splitType === "100% partner") ? "personal" : "shared";
         docData = {
           ...baseData,
           type: "expense",
           paidBy: data.paidBy,
           splitType: data.splitType,
+          visibility: visibility,
+          // Confirma a transação ao salvar (sai dos Pendentes)
+          status: "confirmed",
         };
       } else {
+        const visibility = data.pixDestination === "zara_card" ? "personal" : "shared";
         docData = {
           ...baseData,
           type: "settlement",
           from: data.from,
           to: data.to,
           pixDestination: data.pixDestination || "shared",
+          visibility: visibility,
+          status: "confirmed",
         };
       }
 

@@ -2,8 +2,8 @@ import type { Timestamp } from "firebase/firestore";
 
 // ─── Primitivos compartilhados ───────────────────────────────────────────────
 
-export type Person = "Arthur" | "Zara";
-export type SplitType = "50/50" | "100% Arthur" | "100% Zara";
+export type Person = "owner" | "partner";
+export type SplitType = "50/50" | "100% owner" | "100% partner";
 
 // ─── Transação de despesa real ────────────────────────────────────────────────
 
@@ -25,6 +25,10 @@ export interface ExpenseTransaction {
   currentInstallment?: number;
   groupId?: string;
   originalAmount?: number;
+  /** Visibilidade para queries: shared (partilhado) ou personal (pessoal, ex: fatura) */
+  visibility?: "shared" | "personal";
+  /** Status do ciclo de vida: pending = aguarda confirmação; confirmed = consolidada */
+  status?: "pending" | "confirmed";
 }
 
 // ─── Transação de acerto / Pix ────────────────────────────────────────────────
@@ -46,6 +50,10 @@ export interface SettlementTransaction {
   updatedAt: Timestamp;
   /** Destino do Pix: abater do dia a dia (shared) ou abater da fatura Zara (zara_card) */
   pixDestination?: "shared" | "zara_card";
+  /** Visibilidade para queries: shared (partilhado) ou personal (pessoal, ex: fatura) */
+  visibility?: "shared" | "personal";
+  /** Status do ciclo de vida: pending = aguarda confirmação; confirmed = consolidada */
+  status?: "pending" | "confirmed";
 }
 
 // ─── Union type geral ─────────────────────────────────────────────────────────

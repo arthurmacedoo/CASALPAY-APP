@@ -10,13 +10,14 @@ import {
 import { TransactionItem } from "../components/TransactionItem";
 import { MonthSelector } from "../components/MonthSelector";
 import type { Transaction } from "../types";
+import { OWNER_NAME, PARTNER_NAME } from "../constants/couple";
 
 function isZaraCardPix(t: Transaction): boolean {
   return t.type === "settlement" && t.pixDestination === "zara_card";
 }
 
 function isZaraCardExpense(t: Transaction): boolean {
-  return t.type === "expense" && t.splitType === "100% Zara" && t.paidBy === "Zara";
+  return t.type === "expense" && t.splitType === "100% partner" && t.paidBy === "partner";
 }
 
 function isZaraInvoiceTransaction(t: Transaction): boolean {
@@ -46,10 +47,8 @@ export const HistoryPage: React.FC = () => {
     return zaraTransactions.reduce((acc, t) => {
       if (t.type === 'expense') return acc + t.amount;
       if (t.type === 'settlement') {
-         // Se a Zara enviou o Pix pro Arthur, abate a fatura dela
-         if (t.from === 'Zara') return acc - t.amount;
-         // Se o Arthur enviou pra ela, aumenta a dívida (caso raro)
-         if (t.from === 'Arthur') return acc + t.amount;
+         if (t.from === 'partner') return acc - t.amount;
+         if (t.from === 'owner') return acc + t.amount;
       }
       return acc;
     }, 0);
@@ -184,10 +183,10 @@ export const HistoryPage: React.FC = () => {
               <p className="text-xs text-text-muted mb-0.5">Saldo líquido</p>
               <p className={`font-semibold ${balance.netBalance === 0 ? "text-text-primary" : balance.netBalance > 0 ? "text-accent-pink" : "text-accent-blue"}`}>
                 {balance.netBalance === 0 
-                  ? "Tudo quitado" 
-                  : balance.netBalance > 0 
-                ? `Zara deve ${formatBRL(balance.netBalance)}`
-                : `Arthur deve ${formatBRL(Math.abs(balance.netBalance))}`}
+                ? "Tudo quitado" 
+                : balance.netBalance > 0 
+                ? `${PARTNER_NAME} deve ${formatBRL(balance.netBalance)}`
+                : `${OWNER_NAME} deve ${formatBRL(Math.abs(balance.netBalance))}`}
               </p>
             </div>
           </div>

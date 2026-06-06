@@ -8,6 +8,7 @@ import {
 import {
   initializeFirestore,
   persistentLocalCache,
+  persistentMultipleTabManager,
   collection,
   doc,
 } from "firebase/firestore";
@@ -49,7 +50,7 @@ if (missingKeys.length > 0) {
       ],
     });
     db = initializeFirestore(app, {
-      localCache: persistentLocalCache(),
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
     });
     isFirebaseConfigured = true;
   } catch (error: any) {

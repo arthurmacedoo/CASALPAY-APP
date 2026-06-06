@@ -1,59 +1,156 @@
 import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTransactions } from "../hooks/useTransactions";
+import { usePendingTransactions } from "../hooks/usePendingTransactions";
 import { calculateBalance, generatePixSummary } from "../lib/calculations";
-import { getCurrentMonthKey, formatMonthLabel } from "../lib/formatters";
+import { getCurrentMonthKey, formatMonthLabel, formatBRL, formatDateBR } from "../lib/formatters";
 import { BalanceCard } from "../components/BalanceCard";
 import { TransactionItem } from "../components/TransactionItem";
 import { AnniversaryCountdown } from "../components/AnniversaryCountdown";
 import { Button } from "../components/ui/Button";
+import type { Transaction } from "../types";
+import { PARTNER_NAME, OWNER_NAME } from "../constants/couple";
 
+
+type ViewMode = "shared" | "zara" | "pending";
+
+function isZaraInvoiceTransaction(t: Transaction): boolean {
+  if (t.type === "settlement") return t.pixDestination === "zara_card";
+  if (t.type === "expense") return t.splitType === "100% partner" && t.paidBy === "partner";
+  return false;
+}
+
+
+// ── Card de transação pendente ────────────────────────────────────────────────
+const PendingTransactionCard: React.FC<{
+  transaction: Transaction;
+  onReview: (t: Transaction) => void;
+  onDelete: (t: Transaction) => void;
+}> = ({ transaction, onReview, onDelete }) => {
+  const isExpense = transaction.type === "expense";
+  return (
+    <div className="card border-l-4 border-l-amber-400/70 animate-fade-in-up">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-base">📥</span>
+            <p className="text-base font-semibold text-text-primary truncate">
+              {transaction.description || "Compra via Apple Pay"}
+            </p>
+          </div>
+          <p className="text-xs text-text-muted mb-1">
+            {isExpense ? formatDateBR(transaction.date) : transaction.date}
+            {" · "}
+            <span className="text-amber-400 font-medium">Aguardando revisão</span>
+          </p>
+          <p className="text-xs text-text-muted">
+            Classificação atual: Fatura {PARTNER_NAME}
+          </p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-lg font-bold tabular-nums text-amber-400">
+            {formatBRL(transaction.amount)}
+          </p>
+        </div>
+      </div>
+      <div className="flex gap-2 mt-3 pt-3 border-t border-border">
+        <button
+          onClick={() => onReview(transaction)}
+          className="flex-1 py-2 text-sm font-semibold rounded-xl bg-accent-pink/20 text-accent-pink hover:bg-accent-pink/30 transition-colors"
+        >
+          ✏️ Revisar e Confirmar
+        </button>
+        <button
+          onClick={() => onDelete(transaction)}
+          className="px-4 py-2 text-sm font-medium rounded-xl bg-bg-elevated text-text-muted hover:text-accent-red hover:bg-accent-red/10 transition-colors"
+        >
+          🗑
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ── Página principal ──────────────────────────────────────────────────────────
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
   const currentMonth = getCurrentMonthKey();
-  const { transactions, loading, error } = useTransactions(currentMonth);
-  const [copied, setCopied] = useState(false);
 
+  const { transactions, loading, error, deleteTransaction } = useTransactions(currentMonth);
+  const { pendingTransactions, pendingCount, loading: pendingLoading } = usePendingTransactions();
+
+  const [copied, setCopied] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("shared");
+
+  // ── Filtragem das abas compartilhada e fatura ────────────────────────────────
   const sharedTransactions = useMemo(() => {
-    return transactions.filter(t => {
-      // Ignora Pix para Fatura Zara
+    return transactions.filter((t) => {
+      if (t.visibility) return t.visibility === "shared";
       if (t.type === "settlement" && t.pixDestination === "zara_card") return false;
-      // Ignora Despesas 100% Zara pagas pela Zara
-      if (t.type === "expense" && t.paidBy === "Zara" && t.splitType === "100% Zara") return false;
+      if (t.type === "expense" && t.paidBy === "partner" && t.splitType === "100% partner") return false;
       return true;
     });
   }, [transactions]);
 
+  const zaraTransactions = useMemo(
+    () => transactions.filter(isZaraInvoiceTransaction),
+    [transactions]
+  );
+
+  // ── Cálculos ─────────────────────────────────────────────────────────────────
   const balance = useMemo(
     () => calculateBalance(sharedTransactions),
     [sharedTransactions]
   );
 
-  const recentTransactions = sharedTransactions.slice(0, 5);
+  const zaraInvoiceTotal = useMemo(() => {
+    return zaraTransactions.reduce((acc, t) => {
+      if (t.type === "expense") return acc + t.amount;
+      if (t.type === "settlement") {
+        if (t.from === "partner") return acc - t.amount;
+        if (t.from === "owner") return acc + t.amount;
+      }
+      return acc;
+    }, 0);
+  }, [zaraTransactions]);
 
+  // ── Lista ativa por aba ───────────────────────────────────────────────────────
+  const activeTransactions =
+    viewMode === "shared" ? sharedTransactions :
+    viewMode === "zara"   ? zaraTransactions   :
+    pendingTransactions;
+
+  const recentTransactions = viewMode === "pending"
+    ? activeTransactions          // Pendentes: mostrar todos
+    : activeTransactions.slice(0, 5);
+
+  // ── Handlers ─────────────────────────────────────────────────────────────────
   const handleCopyPix = async () => {
-    const monthLabel = formatMonthLabel(currentMonth);
-    const text = generatePixSummary(balance, monthLabel);
+    const text = generatePixSummary(balance, formatMonthLabel(currentMonth));
     try {
       await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
     } catch {
-      // Fallback para iOS
       const el = document.createElement("textarea");
       el.value = text;
-      el.setAttribute("readonly", ""); 
       el.style.position = "absolute";
-      el.style.left = "-9999px";       
-      
+      el.style.left = "-9999px";
       document.body.appendChild(el);
       el.select();
       document.execCommand("copy");
       document.body.removeChild(el);
-      
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
     }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  const handleReviewPending = (t: Transaction) => {
+    // Reutiliza o fluxo de edição do AddExpense — ao salvar, updateTransaction
+    // irá gravar status: 'confirmed' automaticamente.
+    navigate("/add", { state: { transaction: t } });
+  };
+
+  const handleDeletePending = async (t: Transaction) => {
+    await deleteTransaction(t);
   };
 
   if (error) {
@@ -68,99 +165,210 @@ export const HomePage: React.FC = () => {
     );
   }
 
+  // ── Rótulos das abas ──────────────────────────────────────────────────────────
+  const pendingLabel = pendingCount > 0 ? `Pendentes (${pendingCount})` : "Pendentes";
+
   return (
     <main className="flex-1 overflow-y-auto pb-24">
       {/* Header */}
       <header className="px-6 pt-12 pb-4">
         <h1 className="text-2xl font-bold tracking-tight text-text-primary">
-          Arthur e Zara
+          {OWNER_NAME} e {PARTNER_NAME}
         </h1>
         <p className="text-text-muted text-sm font-medium">Divisão de despesas</p>
       </header>
 
       <div className="px-5 flex flex-col gap-4">
-        {/* Card de saldo */}
-        {loading ? (
+
+        {/* ── Toggle de três abas ──────────────────────────────────────────────── */}
+        <div className="relative flex bg-bg-elevated rounded-xl p-1 border border-border">
+          {/* Sliding Pill */}
+          <div
+            className={`absolute top-1 bottom-1 w-[calc(33.333%-0.167rem)] rounded-lg transition-all duration-300 ease-in-out shadow-sm ${
+              viewMode === "shared"  ? "translate-x-0      bg-accent-pink"  :
+              viewMode === "zara"   ? "translate-x-[100%] bg-[#A855F7]"    :
+                                      "translate-x-[200%] bg-amber-500"
+            }`}
+          />
+
+          <button
+            id="tab-shared"
+            onClick={() => setViewMode("shared")}
+            className={`relative z-10 flex-1 py-2.5 text-xs font-medium rounded-lg transition-colors duration-300 ${
+              viewMode === "shared" ? "text-white" : "text-text-muted hover:text-text-secondary"
+            }`}
+          >
+            Nossos Gastos
+          </button>
+
+          <button
+            id="tab-zara"
+            onClick={() => setViewMode("zara")}
+            className={`relative z-10 flex-1 py-2.5 text-xs font-medium rounded-lg transition-colors duration-300 ${
+              viewMode === "zara" ? "text-white" : "text-text-muted hover:text-text-secondary"
+            }`}
+          >
+            Fatura {PARTNER_NAME}
+          </button>
+
+          <button
+            id="tab-pending"
+            onClick={() => setViewMode("pending")}
+            className={`relative z-10 flex-1 py-2.5 text-xs font-medium rounded-lg transition-colors duration-300 ${
+              viewMode === "pending" ? "text-white" : "text-text-muted hover:text-text-secondary"
+            }`}
+          >
+            {pendingLabel}
+            {pendingCount > 0 && viewMode !== "pending" && (
+              <span className="ml-1 inline-flex items-center justify-center w-4 h-4 text-[9px] font-bold bg-amber-400 text-bg-card rounded-full">
+                {pendingCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* ── Card principal condicional ───────────────────────────────────────── */}
+        {(loading && viewMode !== "pending") ? (
           <div className="card flex items-center justify-center py-12">
             <span className="spinner" />
           </div>
-        ) : (
+        ) : viewMode === "shared" ? (
           <BalanceCard
             balance={balance}
             monthKey={currentMonth}
             onCopyPix={handleCopyPix}
             copied={copied}
           />
-        )}
-
-        {/* Últimas transações */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-semibold text-text-primary">
-              Últimas despesas
-            </h2>
-            {transactions.length > 5 && (
-              <button
-                onClick={() => navigate("/history")}
-                className="text-sm text-accent-pink font-medium"
-              >
-                Ver todas →
-              </button>
+        ) : viewMode === "zara" ? (
+          <div className="card animate-fade-in-up">
+            <p className="text-sm text-text-muted mb-1 font-medium text-center">
+              Total da Fatura {PARTNER_NAME}
+            </p>
+            <p className="text-3xl font-bold text-center tabular-nums text-text-primary mb-3">
+              {formatBRL(Math.max(0, zaraInvoiceTotal))}
+            </p>
+            {zaraInvoiceTotal < 0 ? (
+              <p className="text-xs text-accent-green text-center">
+                Crédito de {formatBRL(Math.abs(zaraInvoiceTotal))} para a próxima fatura
+              </p>
+            ) : (
+              <div className="flex items-center justify-between text-xs text-text-muted border-t border-border pt-3 mt-1">
+                <span>{zaraTransactions.filter((t) => t.type === "expense").length} compras</span>
+                <span>{zaraTransactions.filter((t) => t.type === "settlement").length} pagamentos</span>
+              </div>
             )}
           </div>
+        ) : (
+          /* ── Card de caixa de entrada ─────────────────────────────────────── */
+          <div className="card animate-fade-in-up border border-amber-400/20 bg-amber-400/5">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">📥</span>
+              <div>
+                <p className="text-base font-bold text-text-primary">
+                  Caixa de Entrada
+                </p>
+                <p className="text-xs text-text-muted">
+                  {pendingLoading
+                    ? "Carregando..."
+                    : pendingCount === 0
+                    ? "Nenhuma compra aguardando revisão"
+                    : `${pendingCount} compra${pendingCount > 1 ? "s" : ""} aguardando revisão`}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
-          {loading ? (
+        {/* ── Lista de transações ──────────────────────────────────────────────── */}
+        <div>
+          {viewMode !== "pending" && (
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold text-text-primary">
+                {viewMode === "shared" ? "Últimas despesas" : `Fatura ${PARTNER_NAME}`}
+              </h2>
+              {activeTransactions.length > 5 && (
+                <button
+                  onClick={() => navigate("/history")}
+                  className="text-sm text-accent-pink font-medium"
+                >
+                  Ver todas →
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ── Loading ─────────────────────────────────────────────────────── */}
+          {(viewMode === "pending" ? pendingLoading : loading) ? (
             <div className="flex flex-col gap-3">
               {[1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="card h-20 animate-pulse bg-bg-elevated opacity-50"
-                />
+                <div key={i} className="card h-20 animate-pulse bg-bg-elevated opacity-50" />
               ))}
             </div>
+
+          /* ── Aba Pendentes ─────────────────────────────────────────────────── */
+          ) : viewMode === "pending" ? (
+            pendingTransactions.length === 0 ? (
+              <div className="card flex flex-col items-center py-10 gap-3 text-center">
+                <span className="text-4xl">✅</span>
+                <p className="text-text-secondary font-medium">Tudo em dia!</p>
+                <p className="text-text-muted text-sm max-w-xs">
+                  As compras enviadas pelo iPhone via Apple Pay/Shortcuts aparecerão aqui para revisão.
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {pendingTransactions.map((t) => (
+                  <PendingTransactionCard
+                    key={t.id}
+                    transaction={t}
+                    onReview={handleReviewPending}
+                    onDelete={handleDeletePending}
+                  />
+                ))}
+              </div>
+            )
+
+          /* ── Abas shared/zara ─────────────────────────────────────────────── */
           ) : recentTransactions.length === 0 ? (
             <div className="card flex flex-col items-center py-10 gap-3 text-center">
-              <span className="text-4xl">🛍️</span>
+              <span className="text-4xl">{viewMode === "shared" ? "🛍️" : "💳"}</span>
               <p className="text-text-secondary font-medium">
-                Nenhuma despesa ainda
+                {viewMode === "shared"
+                  ? "Nenhuma despesa ainda"
+                  : `Nenhuma compra na fatura de ${PARTNER_NAME}`}
               </p>
               <p className="text-text-muted text-sm max-w-xs">
-                Adicione a primeira compra do mês e acompanhe quem deve a quem.
+                {viewMode === "shared"
+                  ? "Adicione a primeira compra do mês."
+                  : `As compras do cartão adicional de ${PARTNER_NAME} aparecerão aqui.`}
               </p>
-              <Button
-                size="sm"
-                onClick={() => navigate("/add")}
-                className="mt-2"
-              >
-                + Adicionar despesa
-              </Button>
+              {viewMode === "shared" && (
+                <Button size="sm" onClick={() => navigate("/add")} className="mt-2">
+                  + Adicionar despesa
+                </Button>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-3">
               {recentTransactions.map((t) => (
-                <TransactionItem
-                  key={t.id}
-                  transaction={t}
-                />
+                <TransactionItem key={t.id} transaction={t} />
               ))}
             </div>
           )}
         </div>
 
-        {/* Botão de adicionar — só aparece quando há transações */}
-        {transactions.length > 0 && (
+        {/* Botão de adicionar — só em Nossos Gastos */}
+        {viewMode === "shared" && activeTransactions.length > 0 && !loading && (
           <Button
             id="btn-add-expense-home"
             fullWidth
             onClick={() => navigate("/add")}
             className="mt-2"
-            disabled={loading}
           >
             + Adicionar despesa
           </Button>
         )}
 
-        {/* Contagem Regressiva para 1 ano de namoro */}
         <AnniversaryCountdown />
       </div>
     </main>
