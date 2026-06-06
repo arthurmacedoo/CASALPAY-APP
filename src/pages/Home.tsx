@@ -58,10 +58,14 @@ const PendingTransactionCard: React.FC<{
           onClick={() => onReview(transaction)}
           className="flex-1 py-2 text-sm font-semibold rounded-xl bg-accent-pink/20 text-accent-pink hover:bg-accent-pink/30 transition-colors"
         >
-          ✏️ Revisar e Confirmar
+          ✏️ Revisar
         </button>
         <button
-          onClick={() => onDelete(transaction)}
+          onClick={() => {
+            if (window.confirm("Tem certeza que deseja excluir esta despesa pendente?")) {
+              onDelete(transaction);
+            }
+          }}
           className="px-4 py-2 text-sm font-medium rounded-xl bg-bg-elevated text-text-muted hover:text-accent-red hover:bg-accent-red/10 transition-colors"
         >
           🗑
@@ -80,7 +84,14 @@ export const HomePage: React.FC = () => {
   const { pendingTransactions, pendingCount, loading: pendingLoading } = usePendingTransactions();
 
   const [copied, setCopied] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("shared");
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    return (sessionStorage.getItem("casalpay_viewMode") as ViewMode) || "shared";
+  });
+
+  // Atualiza a sessionStorage sempre que a aba mudar
+  React.useEffect(() => {
+    sessionStorage.setItem("casalpay_viewMode", viewMode);
+  }, [viewMode]);
 
   // ── Filtragem das abas compartilhada e fatura ────────────────────────────────
   const sharedTransactions = useMemo(() => {
@@ -166,7 +177,8 @@ export const HomePage: React.FC = () => {
   }
 
   // ── Rótulos das abas ──────────────────────────────────────────────────────────
-  const pendingLabel = pendingCount > 0 ? `Pendentes (${pendingCount})` : "Pendentes";
+  // Removemos o número do label de texto para usar apenas o badge visual
+  const pendingLabel = "Pendentes";
 
   return (
     <main className="flex-1 overflow-y-auto pb-24">
