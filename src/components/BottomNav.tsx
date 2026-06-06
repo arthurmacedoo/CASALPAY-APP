@@ -9,12 +9,8 @@ interface NavItem {
 }
 
 const HomeIcon = ({ filled }: { filled?: boolean }) => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth={filled ? "0" : "2"} strokeLinecap="round" strokeLinejoin="round">
-    {filled ? (
-      <path d="M12 3 L3 12 h2 v8 c0 0.552 0.448 1 1 1 h3 v-7 h6 v7 h3 c0.552 0 1 -0.448 1 -1 v-8 h2 L12 3 z" />
-    ) : (
-      <path d="M3 12L5 10M5 10L12 3L19 10M5 10V20C5 20.5523 5.44772 21 6 21H9M19 10L21 12M19 10V20C19 20.5523 18.5523 21 18 21H15M9 21C9 21 9 15 12 15C15 15 15 21 15 21M9 21H15" />
-    )}
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={filled ? "2.5" : "2"} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 12L5 10M5 10L12 3L19 10M5 10V20C5 20.5523 5.44772 21 6 21H9M19 10L21 12M19 10V20C19 20.5523 18.5523 21 18 21H15M9 21C9 21 9 15 12 15C15 15 15 21 15 21M9 21H15" />
   </svg>
 );
 
