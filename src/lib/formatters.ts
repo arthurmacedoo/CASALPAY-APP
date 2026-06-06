@@ -1,6 +1,7 @@
 /**
  * Formatadores de exibição — BRL e datas no padrão brasileiro.
  */
+import { OWNER_NAME, PARTNER_NAME } from "../constants/couple";
 
 /**
  * Formata centavos para moeda brasileira. Ex: 12050 → "R$ 120,50"
@@ -91,10 +92,13 @@ export function formatSplitType(splitType: string): string {
   switch (splitType) {
     case "50/50":
       return "Dividido 50/50";
+    case "100% owner":
     case "100% Arthur":
-      return "Só do Arthur";
+      return `Só do ${OWNER_NAME}`;
+    case "100% partner":
     case "100% Namorada":
-      return "Só da Namorada";
+    case "100% Zara":
+      return `Só da ${PARTNER_NAME}`;
     case "Pix Antecipado":
       return "Pix Antecipado 💸";
     default:

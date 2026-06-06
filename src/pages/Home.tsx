@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useTransactions } from "../hooks/useTransactions";
 import { usePendingTransactions } from "../hooks/usePendingTransactions";
@@ -28,6 +29,8 @@ const PendingTransactionCard: React.FC<{
   onDelete: (t: Transaction) => void;
 }> = ({ transaction, onReview, onDelete }) => {
   const isExpense = transaction.type === "expense";
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   return (
     <div className="card border-l-4 border-l-amber-400/70 animate-fade-in-up">
       <div className="flex items-start justify-between gap-3">
@@ -61,16 +64,41 @@ const PendingTransactionCard: React.FC<{
           ✏️ Revisar
         </button>
         <button
-          onClick={() => {
-            if (window.confirm("Tem certeza que deseja excluir esta despesa pendente?")) {
-              onDelete(transaction);
-            }
-          }}
+          onClick={() => setIsModalOpen(true)}
           className="px-4 py-2 text-sm font-medium rounded-xl bg-bg-elevated text-text-muted hover:text-accent-red hover:bg-accent-red/10 transition-colors"
         >
           🗑
         </button>
       </div>
+
+      {isModalOpen && createPortal(
+        <div style={{ zIndex: 9999 }} className="fixed inset-0 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fade-in-up">
+          <div className="bg-bg-elevated p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-border">
+            <h3 className="text-lg font-bold text-text-primary mb-2">Excluir pendente</h3>
+            <p className="text-sm text-text-secondary mb-6 leading-relaxed">
+              Tem certeza que deseja excluir esta despesa pendente? O valor de {formatBRL(transaction.amount)} será ignorado.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-text-primary bg-bg-card hover:bg-border rounded-xl transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  onDelete(transaction);
+                  setIsModalOpen(false);
+                }}
+                className="px-4 py-2 text-sm font-medium bg-accent-red/20 text-accent-red hover:bg-accent-red/30 rounded-xl transition-colors"
+              >
+                Confirmar Exclusão
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
