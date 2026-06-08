@@ -25,11 +25,47 @@ function getMonthKey(date: string): string {
   return date.slice(0, 7);
 }
 
-/** Converte valor em reais (float ou string) para centavos (inteiro). */
+/**
+ * Higieniza e converte um valor monetário para centavos.
+ * Aceita: "R$ 15,90", "15.90", " 15,90 ", "BRL 15.90", "1590" etc.
+ * Retorna null se o resultado for zero, negativo ou não-numérico.
+ */
 function toCents(value: unknown): number | null {
-  const num = typeof value === "string"
-    ? parseFloat(value.replace(",", "."))
-    : Number(value);
+  if (value === null || value === undefined) return null;
+
+  let raw = String(value).trim();
+
+  // Remove tudo que não seja dígito, vírgula ou ponto
+  raw = raw.replace(/[^\d,.]/g, "");
+
+  if (!raw) return null;
+
+  // Detecta o separador decimal:
+  // "1.234,56" → ponto como milhar, vírgula como decimal → remove ponto, troca vírgula
+  // "1,234.56" → vírgula como milhar, ponto como decimal → remove vírgula
+  // "15,90"    → só vírgula → troca por ponto
+  // "15.90"    → só ponto   → manter
+  const hasComma = raw.includes(",");
+  const hasDot   = raw.includes(".");
+
+  if (hasComma && hasDot) {
+    // Formato europeu: 1.234,56
+    const lastComma = raw.lastIndexOf(",");
+    const lastDot   = raw.lastIndexOf(".");
+    if (lastComma > lastDot) {
+      // vírgula é decimal
+      raw = raw.replace(/\./g, "").replace(",", ".");
+    } else {
+      // ponto é decimal
+      raw = raw.replace(/,/g, "");
+    }
+  } else if (hasComma) {
+    // Só vírgula → decimal brasileiro: 15,90
+    raw = raw.replace(",", ".");
+  }
+  // Se só tem ponto: já está no formato correto (15.90)
+
+  const num = parseFloat(raw);
   if (isNaN(num) || num <= 0) return null;
   return Math.round(num * 100);
 }
@@ -51,44 +87,45 @@ type ValidationResult =
   | { ok: false; reason: string };
 
 /**
- * TAREFA 1 — Validação estrita dos dados recebidos.
- * Retorna os campos prontos para uso OU o motivo da falha.
+ * Validação com higienização inteligente:
+ * - Amount: limpa símbolos antes de converter
+ * - Description: usa "Compra Apple Pay" se ausente (NÃO falha)
+ * - Date: usa hoje como fallback se inválida
+ * - Falha APENAS se o amount for irrecuperável
  */
 function validateBody(body: Record<string, unknown>): ValidationResult {
   const { amount, description, date } = body;
 
-  // Valida amount: deve existir, ser número válido e maior que zero
+  // 1. Higieniza e valida o amount — único motivo de fallback real
   const amountCents = toCents(amount);
   if (!amountCents) {
-    return { ok: false, reason: "Valor não identificado" };
+    return {
+      ok: false,
+      reason: `Valor irrecuperável: "${String(amount ?? "ausente")}"`,
+    };
   }
 
-  // Valida description: não pode ser vazia, nula ou a string literal "undefined"
-  if (
-    description === null ||
-    description === undefined ||
-    typeof description !== "string" ||
-    description.trim() === "" ||
-    description.trim().toLowerCase() === "undefined"
-  ) {
-    return { ok: false, reason: "Descrição ausente ou inválida" };
-  }
+  // 2. Description: usa padrão se vazio/nulo/undefined/"undefined"
+  const rawDesc = typeof description === "string" ? description.trim() : "";
+  const finalDescription =
+    rawDesc === "" || rawDesc.toLowerCase() === "undefined"
+      ? "Compra Apple Pay"
+      : rawDesc;
 
-  // Valida date: aceita YYYY-MM-DD; usa hoje como fallback se inválida
+  // 3. Date: usa hoje se inválida
   const finalDate = isValidDate(date) ? date : todayISO();
 
   return {
     ok: true,
     amountCents,
-    description: description.trim(),
+    description: finalDescription,
     finalDate,
   };
 }
 
 /**
- * TAREFA 2 — Cria uma despesa de "alerta" na caixa de Pendentes quando
- * a validação falha. Garante que o usuário veja o problema no app e possa
- * revisar/corrigir manualmente sem perder o registro.
+ * Cria uma despesa de "alerta" na caixa de Pendentes quando
+ * a validação falha — amount completamente irrecuperável.
  */
 async function saveFallbackExpense(
   db: FirebaseFirestore.Firestore,
@@ -101,15 +138,15 @@ async function saveFallbackExpense(
   const docData = {
     type:        "expense",
     description: `⚠️ Erro Apple Pay: ${reason}`,
-    amount:      1,              // 1 centavo — simbólico, para passar regras de negócio
+    amount:      1,              // 1 centavo simbólico
     date:        fallbackDate,
     monthKey:    getMonthKey(fallbackDate),
     coupleId,
-    paidBy:      "Zara",
-    splitType:   "100% Zara",
-    status:      "pending",      // Aparece na aba "Pendentes" para revisão manual
+    paidBy:      "partner",
+    splitType:   "100% partner",
+    status:      "pending",
     source:      "webhook-apple-pay-fallback",
-    rawPayload:  JSON.stringify(rawBody).slice(0, 500), // Dado original para debug
+    rawPayload:  JSON.stringify(rawBody).slice(0, 500),
     createdAt:   FieldValue.serverTimestamp(),
     updatedAt:   FieldValue.serverTimestamp(),
   };
@@ -125,9 +162,9 @@ async function saveFallbackExpense(
 }
 
 /**
- * TAREFA 3 — Envia alerta FCM para ambos os membros do casal.
- * Reutiliza a mesma lógica de tokens do send-notification.ts.
- * É best-effort: nunca lança exceção — erros são apenas logados.
+ * Envia uma notificação para TODOS os tokens FCM do casal de uma vez.
+ * Usa sendEachForMulticast para evitar notificações duplicadas no mesmo aparelho.
+ * É best-effort: nunca lança exceção.
  */
 async function sendCriticalAlert(
   db: FirebaseFirestore.Firestore,
@@ -138,39 +175,46 @@ async function sendCriticalAlert(
 
   try {
     const messaging = getMessaging();
-    const targets = ["Arthur", "Zara"];
 
-    for (const target of targets) {
-      const tokenDoc = await db
-        .collection("couples")
-        .doc(coupleId)
-        .collection("fcm_tokens")
-        .doc(target)
-        .get();
+    // Coleta todos os tokens únicos do casal
+    const tokensSnap = await db
+      .collection("couples")
+      .doc(coupleId)
+      .collection("fcm_tokens")
+      .get();
 
-      const fcmToken = tokenDoc.data()?.token;
-      if (!fcmToken || typeof fcmToken !== "string") continue;
+    const tokens: string[] = [];
+    tokensSnap.forEach((doc) => {
+      const token = doc.data()?.token;
+      if (token && typeof token === "string" && !tokens.includes(token)) {
+        tokens.push(token);
+      }
+    });
 
-      await messaging.send({
-        token: fcmToken,
-        notification: {
-          title: "🚨 CasalPay — Alerta Apple Pay",
-          body:  message,
-        },
-        webpush: {
-          notification: {
-            icon:  "/icon-192.png",
-            badge: "/icon-192.png",
-            tag:   "casalpay-critical-alert",
-          },
-          headers: { Urgency: "high", TTL: "300" },
-        },
-      });
-
-      console.log(`[webhook] Alerta crítico enviado para ${target}`);
+    if (tokens.length === 0) {
+      console.warn("[webhook] Nenhum token FCM encontrado para notificar.");
+      return;
     }
+
+    // Envia uma única chamada para todos os tokens (evita duplicatas)
+    const response = await messaging.sendEachForMulticast({
+      tokens,
+      notification: {
+        title: "🚨 CasalPay — Alerta Apple Pay",
+        body:  message,
+      },
+      webpush: {
+        notification: {
+          icon:  "/icon-192.png",
+          badge: "/icon-192.png",
+          tag:   "casalpay-critical-alert", // tag única: substitui a anterior em vez de empilhar
+        },
+        headers: { Urgency: "high", TTL: "300" },
+      },
+    });
+
+    console.log(`[webhook] Notificação enviada: ${response.successCount} ok, ${response.failureCount} falha(s).`);
   } catch (notifErr) {
-    // Erros de notificação são secundários — logamos e continuamos
     const msg = notifErr instanceof Error ? notifErr.message : String(notifErr);
     console.error("[webhook] Falha ao enviar alerta FCM:", msg);
   }
@@ -178,7 +222,6 @@ async function sendCriticalAlert(
 
 // ── Handler Principal ──────────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS para chamadas do iOS Shortcuts via HTTP
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -200,7 +243,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  // ── Firebase Admin disponível? ─────────────────────────────────────────────
   if (!getApps().length) {
     return res.status(500).json({ error: "Firebase Admin não inicializado" });
   }
@@ -209,36 +251,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const db        = getFirestore();
   const rawBody   = (req.body ?? {}) as Record<string, unknown>;
 
-  // ── TAREFA 3: Try/Catch Global (erros de infraestrutura) ──────────────────
   try {
-
-    // ── TAREFA 1: Validação Estrita ──────────────────────────────────────────
+    // ── Validação Inteligente ─────────────────────────────────────────────────
     const validation = validateBody(rawBody);
 
     if (!validation.ok) {
       console.warn(`[webhook] Validação falhou — ${validation.reason}`, rawBody);
 
-      // ── TAREFA 2: Cria despesa de alerta nos Pendentes ─────────────────────
       const fallbackId = await saveFallbackExpense(db, COUPLE_ID, validation.reason, rawBody);
 
-      // Notifica ambos sobre a compra com dados incompletos
       await sendCriticalAlert(
         db,
         COUPLE_ID,
-        `Compra Apple Pay com dados incompletos detectada. Motivo: "${validation.reason}". Verifique a aba Pendentes.`
+        `Compra Apple Pay com valor irrecuperável. Motivo: "${validation.reason}". Verifique a aba Pendentes.`
       );
 
-      // HTTP 200: a requisição foi aceita e salva como fallback (sucesso parcial)
       return res.status(200).json({
         ok:       false,
         fallback: true,
         id:       fallbackId,
         reason:   validation.reason,
-        message:  "Dados inválidos. Despesa de alerta criada nos Pendentes para revisão manual.",
+        message:  "Valor irrecuperável. Despesa de alerta criada nos Pendentes.",
       });
     }
 
-    // ── Dados válidos: grava despesa normal como Pendente ─────────────────────
+    // ── Dados válidos: grava despesa Pendente normal ───────────────────────────
     const { amountCents, description, finalDate } = validation;
     const monthKey = getMonthKey(finalDate);
 
@@ -249,9 +286,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       date:        finalDate,
       monthKey,
       coupleId:    COUPLE_ID,
-      paidBy:      "Zara",
-      splitType:   "100% Zara",
-      status:      "pending",    // Fica nos Pendentes para confirmação manual
+      paidBy:      "partner",
+      splitType:   "100% partner",
+      visibility:  "personal",
+      status:      "pending",
       source:      "webhook-apple-pay",
       createdAt:   FieldValue.serverTimestamp(),
       updatedAt:   FieldValue.serverTimestamp(),
@@ -274,11 +312,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
   } catch (err: unknown) {
-    // ── Erro de infraestrutura (Firebase down, env ausente, etc.) ─────────────
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("[webhook] Erro crítico de infraestrutura:", msg);
 
-    // Best-effort: tenta notificar o casal; falha aqui não propaga
     try {
       await sendCriticalAlert(
         db,
@@ -286,7 +322,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         "Falha crítica ao registrar compra no Apple Pay. Verifique o sistema."
       );
     } catch {
-      // silencia — o erro primário já foi logado acima
+      // silencia — erro primário já foi logado
     }
 
     return res.status(500).json({ error: "Internal server error", detail: msg });
