@@ -82,26 +82,33 @@ function todayISO(): string {
 }
 
 // ── Resultado da validação ────────────────────────────────────────────────────
-type ValidationResult =
-  | { ok: true; amountCents: number; description: string; finalDate: string }
-  | { ok: false; reason: string };
+// Usamos um objeto simples com campo errorReason opcional para evitar
+// problemas de narrowing de union types no compilador do Vercel.
+type ValidationResult = {
+  amountCents: number;    // 0 = falha
+  description: string;
+  finalDate: string;
+  errorReason?: string;   // definido apenas quando a validação falha
+};
 
 /**
  * Validação com higienização inteligente:
  * - Amount: limpa símbolos antes de converter
  * - Description: usa "Compra Apple Pay" se ausente (NÃO falha)
  * - Date: usa hoje como fallback se inválida
- * - Falha APENAS se o amount for irrecuperável
+ * - Falha APENAS se o amount for irrecuperável (retorna errorReason)
  */
 function validateBody(body: Record<string, unknown>): ValidationResult {
   const { amount, description, date } = body;
 
   // 1. Higieniza e valida o amount — único motivo de fallback real
-  const amountCents = toCents(amount);
-  if (!amountCents) {
+  const amountCents = toCents(amount) ?? 0;
+  if (amountCents <= 0) {
     return {
-      ok: false,
-      reason: `Valor irrecuperável: "${String(amount ?? "ausente")}"`,
+      amountCents: 0,
+      description: "",
+      finalDate: isValidDate(date) ? date : todayISO(),
+      errorReason: `Valor irrecuperável: "${String(amount ?? "ausente")}"`,
     };
   }
 
@@ -115,12 +122,7 @@ function validateBody(body: Record<string, unknown>): ValidationResult {
   // 3. Date: usa hoje se inválida
   const finalDate = isValidDate(date) ? date : todayISO();
 
-  return {
-    ok: true,
-    amountCents,
-    description: finalDescription,
-    finalDate,
-  };
+  return { amountCents, description: finalDescription, finalDate };
 }
 
 /**
@@ -255,22 +257,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── Validação Inteligente ─────────────────────────────────────────────────
     const validation = validateBody(rawBody);
 
-    if (!validation.ok) {
-      console.warn(`[webhook] Validação falhou — ${validation.reason}`, rawBody);
+    if (validation.errorReason) {
+      const reason = validation.errorReason;
+      console.warn(`[webhook] Validação falhou — ${reason}`, rawBody);
 
-      const fallbackId = await saveFallbackExpense(db, COUPLE_ID, validation.reason, rawBody);
+      const fallbackId = await saveFallbackExpense(db, COUPLE_ID, reason, rawBody);
 
       await sendCriticalAlert(
         db,
         COUPLE_ID,
-        `Compra Apple Pay com valor irrecuperável. Motivo: "${validation.reason}". Verifique a aba Pendentes.`
+        `Compra Apple Pay com valor irrecuperável. Motivo: "${reason}". Verifique a aba Pendentes.`
       );
 
       return res.status(200).json({
         ok:       false,
         fallback: true,
         id:       fallbackId,
-        reason:   validation.reason,
+        reason,
         message:  "Valor irrecuperável. Despesa de alerta criada nos Pendentes.",
       });
     }
