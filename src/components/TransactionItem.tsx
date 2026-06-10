@@ -68,15 +68,13 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
             {formatBRL(transaction.amount)}
           </p>
           {showActions && (
-            <div className="flex gap-2 mt-2 justify-end">
-              {!(isExpense && (transaction as ExpenseTransaction).groupId) && (
-                <button
-                  onClick={() => onEdit?.(transaction)}
-                  className="text-xs text-text-muted hover:text-accent-blue transition-colors px-2 py-1 rounded-lg hover:bg-accent-blue/10"
-                >
-                  Editar
-                </button>
-              )}
+          <div className="flex gap-2 mt-2 justify-end">
+              <button
+                onClick={() => onEdit?.(transaction)}
+                className="text-xs text-text-muted hover:text-accent-blue transition-colors px-2 py-1 rounded-lg hover:bg-accent-blue/10"
+              >
+                Editar
+              </button>
               <button
                 onClick={handleDeleteClick}
                 className="text-xs text-text-muted hover:text-accent-red hover:bg-accent-red/10 px-2 py-1 rounded-lg transition-colors"

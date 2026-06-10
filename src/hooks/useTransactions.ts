@@ -27,7 +27,7 @@ interface UseTransactionsReturn {
   loading: boolean;
   error: string | null;
   addTransaction: (data: TransactionFormData, amountCents: number) => Promise<void>;
-  updateTransaction: (id: string, data: TransactionFormData, amountCents: number) => Promise<void>;
+  updateTransaction: (originalTransaction: Transaction, data: TransactionFormData, amountCents: number) => Promise<void>;
   deleteTransaction: (transaction: Transaction) => Promise<void>;
 }
 
@@ -184,41 +184,110 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
   );
 
   const updateTransaction = useCallback(
-    async (id: string, data: TransactionFormData, amountCents: number) => {
+    async (originalTransaction: Transaction, data: TransactionFormData, amountCents: number) => {
+      const wasInstallment = Boolean(originalTransaction.groupId);
+      const willBeInstallment = data.type === "expense" && Boolean(data.isInstallment) && (data.installmentCount ?? 0) > 1;
+
+      // ─── Cenário A: qualquer mudança envolvendo parcelas ─────────────────────
+      if (wasInstallment || willBeInstallment) {
+        const batch = writeBatch(db);
+
+        // 1. Apagar parcelas antigas
+        if (originalTransaction.groupId) {
+          const oldGroupSnap = await getDocs(
+            query(transactionsRef(), where("groupId", "==", originalTransaction.groupId))
+          );
+          oldGroupSnap.forEach((docSnap) => batch.delete(docSnap.ref));
+        } else {
+          // Era compra única (ex: pending sem groupId) — apaga só o doc original
+          batch.delete(transactionDocRef(originalTransaction.id));
+        }
+
+        // 2. Criar as N novas parcelas no mesmo batch
+        if (willBeInstallment) {
+          const count = data.installmentCount!;
+          const baseAmount = Math.floor(amountCents / count);
+          const remainder = amountCents % count;
+          const newGroupId = doc(collection(db, "couples")).id;
+          const [year, month, day] = data.date.split("-").map(Number);
+
+          for (let i = 1; i <= count; i++) {
+            const installmentAmount = i === 1 ? baseAmount + remainder : baseAmount;
+            const targetMonthZeroIndex = month - 1 + (i - 1);
+            const newYear = year + Math.floor(targetMonthZeroIndex / 12);
+            const newMonthIndex = targetMonthZeroIndex % 12;
+            const lastDayOfTargetMonth = new Date(newYear, newMonthIndex + 1, 0).getDate();
+            const newDay = Math.min(day, lastDayOfTargetMonth);
+            const newDateStr = `${newYear}-${String(newMonthIndex + 1).padStart(2, "0")}-${String(newDay).padStart(2, "0")}`;
+            const visibility = (data.paidBy === "partner" && data.splitType === "100% partner") ? "personal" : "shared";
+
+            batch.set(doc(transactionsRef()), {
+              description: data.description.trim(),
+              coupleId: COUPLE_ID,
+              amount: installmentAmount,
+              date: newDateStr,
+              monthKey: getMonthKey(newDateStr),
+              type: "expense",
+              paidBy: data.paidBy,
+              splitType: data.splitType,
+              installmentCount: count,
+              currentInstallment: i,
+              groupId: newGroupId,
+              originalAmount: amountCents,
+              visibility,
+              status: "confirmed",
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+          }
+        } else {
+          // Passou de parcelado para compra única: cria um novo doc simples
+          const visibility = data.type === "expense"
+            ? (data.paidBy === "partner" && data.splitType === "100% partner" ? "personal" : "shared")
+            : (data.pixDestination === "zara_card" ? "personal" : "shared");
+
+          batch.set(doc(transactionsRef()), {
+            description: data.description.trim(),
+            coupleId: COUPLE_ID,
+            amount: amountCents,
+            date: data.date,
+            monthKey: getMonthKey(data.date),
+            type: data.type,
+            ...(data.type === "expense"
+              ? { paidBy: data.paidBy, splitType: data.splitType }
+              : { from: data.from, to: data.to, pixDestination: data.pixDestination || "shared" }
+            ),
+            visibility,
+            status: "confirmed",
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        await batch.commit();
+        return;
+      }
+
+      // ─── Cenário B: edição simples de compra única ─────────────────────────
       const baseData = {
         description: data.description.trim(),
         amount: amountCents,
         date: data.date,
         monthKey: getMonthKey(data.date),
         updatedAt: serverTimestamp(),
+        status: "confirmed" as const,
       };
 
       let docData;
       if (data.type === "expense") {
         const visibility = (data.paidBy === "partner" && data.splitType === "100% partner") ? "personal" : "shared";
-        docData = {
-          ...baseData,
-          type: "expense",
-          paidBy: data.paidBy,
-          splitType: data.splitType,
-          visibility: visibility,
-          // Confirma a transação ao salvar (sai dos Pendentes)
-          status: "confirmed",
-        };
+        docData = { ...baseData, type: "expense" as const, paidBy: data.paidBy, splitType: data.splitType, visibility };
       } else {
         const visibility = data.pixDestination === "zara_card" ? "personal" : "shared";
-        docData = {
-          ...baseData,
-          type: "settlement",
-          from: data.from,
-          to: data.to,
-          pixDestination: data.pixDestination || "shared",
-          visibility: visibility,
-          status: "confirmed",
-        };
+        docData = { ...baseData, type: "settlement" as const, from: data.from, to: data.to, pixDestination: data.pixDestination || "shared", visibility };
       }
 
-      await updateDoc(transactionDocRef(id), docData);
+      await updateDoc(transactionDocRef(originalTransaction.id), docData);
     },
     []
   );

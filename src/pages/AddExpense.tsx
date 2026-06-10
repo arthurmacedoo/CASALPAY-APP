@@ -49,10 +49,19 @@ export const AddExpensePage: React.FC = () => {
 
   const [form, setForm] = useState<TransactionFormData>(
     editTransaction
-      ? {
-          ...editTransaction,
-          amount: (editTransaction.amount / 100).toFixed(2).replace(".", ","),
-        } as TransactionFormData
+      ? (() => {
+          // Usa o valor total original para não confundir quem edita uma parcela
+          const displayAmount = editTransaction.type === "expense" && editTransaction.originalAmount
+            ? editTransaction.originalAmount
+            : editTransaction.amount;
+          const isInstallment = editTransaction.type === "expense" && (editTransaction.installmentCount ?? 0) > 1;
+          return {
+            ...editTransaction,
+            amount: (displayAmount / 100).toFixed(2).replace(".", ","),
+            isInstallment,
+            installmentCount: isInstallment ? (editTransaction.installmentCount ?? 2) : 2,
+          } as TransactionFormData;
+        })()
       : initialExpenseData
   );
 
@@ -100,12 +109,15 @@ export const AddExpensePage: React.FC = () => {
 
     try {
       let submitData = { ...form };
+
+      // Regra de negócio: parcelado sempre é 100% de quem pagou
       if (submitData.type === "expense" && submitData.isInstallment) {
         submitData.splitType = submitData.paidBy === "owner" ? "100% owner" : "100% partner";
       }
 
       if (isEditing && editTransaction) {
-        await updateTransaction(editTransaction.id, submitData, cents);
+        // A inteligência de apagar+recriar parcelas vive no hook
+        await updateTransaction(editTransaction, submitData, cents);
       } else {
         await addTransaction(submitData, cents);
       }
@@ -232,8 +244,8 @@ export const AddExpensePage: React.FC = () => {
           error={errors.amount}
         />
 
-        {/* Toggle Parcelamento */}
-        {!isEditing && isExpense && (
+        {/* Toggle Parcelamento — visível para qualquer despesa (nova ou em edição) */}
+        {isExpense && (
           <div className="flex flex-col gap-3">
             <label className="flex items-center justify-between bg-bg-elevated p-4 rounded-xl border border-border cursor-pointer">
               <span className="text-sm font-medium text-text-primary">Compra Parcelada?</span>
@@ -438,7 +450,7 @@ export const AddExpensePage: React.FC = () => {
               ? "Salvando..."
               : isEditing
               ? "✓ Atualizar"
-              : isExpense 
+              : isExpense
               ? "💾 Salvar despesa"
               : "💸 Registrar Pix"}
           </Button>
