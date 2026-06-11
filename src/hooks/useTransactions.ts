@@ -185,7 +185,7 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
 
   const updateTransaction = useCallback(
     async (originalTransaction: Transaction, data: TransactionFormData, amountCents: number) => {
-      const wasInstallment = Boolean(originalTransaction.groupId);
+      const wasInstallment = originalTransaction.type === "expense" && Boolean(originalTransaction.groupId);
       const willBeInstallment = data.type === "expense" && Boolean(data.isInstallment) && (data.installmentCount ?? 0) > 1;
 
       // ─── Cenário A: qualquer mudança envolvendo parcelas ─────────────────────
@@ -193,9 +193,10 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
         const batch = writeBatch(db);
 
         // 1. Apagar parcelas antigas
-        if (originalTransaction.groupId) {
+        const expenseOrig = originalTransaction.type === "expense" ? originalTransaction : null;
+        if (expenseOrig?.groupId) {
           const oldGroupSnap = await getDocs(
-            query(transactionsRef(), where("groupId", "==", originalTransaction.groupId))
+            query(transactionsRef(), where("groupId", "==", expenseOrig.groupId))
           );
           oldGroupSnap.forEach((docSnap) => batch.delete(docSnap.ref));
         } else {

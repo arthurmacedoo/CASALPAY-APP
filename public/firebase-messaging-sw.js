@@ -1,5 +1,6 @@
 // firebase-messaging-sw.js
-// Service Worker para receber notificações push do Firebase Cloud Messaging
+// Service Worker EXCLUSIVO para Firebase Cloud Messaging.
+// Escopo: /firebase-cloud-messaging-push-scope (isolado do SW do PWA/Workbox)
 
 importScripts('https://www.gstatic.com/firebasejs/11.0.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/11.0.0/firebase-messaging-compat.js');
@@ -16,9 +17,7 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 // Exibe notificação quando o app está em BACKGROUND ou FECHADO.
-// O payload do backend tem "notification" na raiz, o que é obrigatório
-// para a Apple entregar o Web Push. O Firebase SW lê esse campo e
-// exibe o banner nativo automaticamente via onBackgroundMessage.
+// "notification" na raiz é obrigatório para a Apple entregar Web Push.
 messaging.onBackgroundMessage((payload) => {
   const { title, body } = payload.notification ?? {};
   if (!title) return;
@@ -28,22 +27,25 @@ messaging.onBackgroundMessage((payload) => {
     icon: '/icon-192.png',
     badge: '/icon-192.png',
     tag: 'casalpay-love',
-    data: { url: self.registration.scope },
+    renotify: true,
+    vibrate: [200, 100, 200],
+    data: { url: '/messages' },
   });
 });
 
-// Abre o app ao tocar na notificação
+// Abre /messages ao tocar na notificação
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  const targetUrl =
-    (event.notification.data && event.notification.data.url) ||
-    self.registration.scope;
+  const targetUrl = (event.notification.data && event.notification.data.url)
+    ? new URL(event.notification.data.url, self.location.origin).href
+    : self.location.origin + '/messages';
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
       for (const client of windowClients) {
-        if (client.url.startsWith(self.registration.scope) && 'focus' in client) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.navigate(targetUrl);
           return client.focus();
         }
       }

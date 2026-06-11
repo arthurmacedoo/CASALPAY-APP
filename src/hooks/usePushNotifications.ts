@@ -5,94 +5,138 @@ import type { User } from "firebase/auth";
 import toast from "react-hot-toast";
 import { OWNER_NAME, PARTNER_NAME } from "../constants/couple";
 
-// A chave VAPID agora é injetada via Vercel Environment Variables
+// VITE_FIREBASE_VAPID_KEY deve estar configurado na Vercel e no .env local
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+
+// Escopo dedicado para o Service Worker do FCM — evita conflito com o SW do PWA/Workbox
+const FCM_SW_SCOPE = "/firebase-cloud-messaging-push-scope";
+
+export type PushStatus =
+  | "idle"
+  | "registering"
+  | "registered"
+  | "error";
 
 export function usePushNotifications(user: User | null) {
   const [permission, setPermission] = useState<NotificationPermission>(
     "Notification" in window ? Notification.permission : "denied"
   );
+  const [pushStatus, setPushStatus] = useState<PushStatus>("idle");
+  const [pushError, setPushError] = useState<string | null>(null);
 
   const setupPush = useCallback(async () => {
     if (!user) return;
-    if (!("Notification" in window)) return;
-    if (!("serviceWorker" in navigator)) return;
 
-    if (Notification.permission !== "granted") return;
+    // ── Diagnóstico de pré-condições ──────────────────────────────────────────
+    if (!("Notification" in window)) {
+      console.warn("[FCM] Este browser não suporta Notification API.");
+      return;
+    }
+    if (!("serviceWorker" in navigator)) {
+      console.warn("[FCM] Este browser não suporta Service Workers.");
+      return;
+    }
+    if (Notification.permission !== "granted") {
+      console.log(`[FCM] Permissão atual: ${Notification.permission}. Aguardando concessão.`);
+      return;
+    }
+    if (!VAPID_KEY) {
+      const err = "VITE_FIREBASE_VAPID_KEY não configurado. Adicione nas variáveis de ambiente da Vercel.";
+      console.error("[FCM] ⚠️ " + err);
+      setPushError(err);
+      setPushStatus("error");
+      return;
+    }
+
+    setPushStatus("registering");
+    setPushError(null);
 
     try {
-      // 1. Registra o service worker do Firebase Messaging
+      // 1. Registra o SW do FCM com escopo dedicado (sem conflito com PWA/Workbox)
+      console.log("[FCM] Registrando Service Worker em escopo:", FCM_SW_SCOPE);
       const swReg = await navigator.serviceWorker.register(
         "/firebase-messaging-sw.js",
-        { scope: "/" }
+        { scope: FCM_SW_SCOPE }
       );
+      console.log("[FCM] ✅ SW registrado:", swReg.scope);
 
       const messaging = getFirebaseMessaging();
-      if (!messaging) return;
-
-      // 2. Obtém o token FCM do dispositivo atual
-      if (!VAPID_KEY) {
-        console.warn("⚠️ VAPID_KEY ausente! Configure VITE_FIREBASE_VAPID_KEY na Vercel.");
+      if (!messaging) {
+        console.error("[FCM] Firebase Messaging não disponível neste contexto.");
+        setPushStatus("error");
+        setPushError("Firebase Messaging não disponível.");
         return;
       }
 
+      // 2. Obtém o token FCM usando EXATAMENTE o SW que acabamos de registrar
+      console.log("[FCM] Solicitando token FCM com VAPID_KEY...");
       const token = await getToken(messaging, {
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: swReg,
-      }).catch(err => {
-        console.error("Erro getToken: " + err.message);
+      }).catch((err: Error) => {
+        console.error("[FCM] ❌ getToken falhou:", err.message);
         return null;
       });
 
       if (!token) {
-        console.warn("[FCM] getToken retornou nulo.");
+        const errMsg = "Não foi possível obter o token FCM. Verifique as permissões e a VAPID key.";
+        console.warn("[FCM] " + errMsg);
+        setPushStatus("error");
+        setPushError(errMsg);
         return;
       }
-      
-      // 3. Salva o token chamando a nossa API serverless
-      // Determina o nome do usuário pelo e-mail (Arthur ou Zara)
+
+      console.log(`[FCM] ✅ Token obtido: ...${token.slice(-12)}`);
+
+      // 3. Envia o token para a API serverless salvar no Firestore
       const isOwner  = (user.email ?? "").toLowerCase().startsWith("arthur");
       const userName = isOwner ? OWNER_NAME : PARTNER_NAME;
+      const platform = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? "mobile" : "desktop";
 
-      try {
-        const platformStr = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? "mobile" : "desktop";
-        const response = await fetch("/api/register-device", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            token,
-            user: userName,   // "Arthur" ou "Zara" — documento no Firestore
-            platform: platformStr,
-          }),
-        });
-        
-        if (response.ok) {
-          console.log("[FCM] Token salvo no banco com sucesso via API!");
-        } else {
-          const errText = await response.text();
-          console.error("[FCM] API falhou ao salvar token:", errText);
-        }
-      } catch (apiErr: any) {
-        console.error("[FCM] Erro na requisição para /api/register-device:", apiErr.message);
+      console.log(`[FCM] Registrando dispositivo para ${userName} (${platform})...`);
+
+      const response = await fetch("/api/register-device", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          user:      userName,
+          platform,
+          userAgent: navigator.userAgent,
+        }),
+      });
+
+      const responseData = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        console.log(`[FCM] ✅ Aparelho registrado (doc: ${responseData.docId})`);
+        setPushStatus("registered");
+      } else {
+        const errMsg = responseData.error ?? `Erro HTTP ${response.status} ao registrar dispositivo.`;
+        console.error("[FCM] ❌ API register-device falhou:", errMsg);
+        setPushStatus("error");
+        setPushError(errMsg);
+        return;
       }
 
-      // 4. Exibe notificações quando o app estiver em FOREGROUND (aberto na tela)
-      // No iOS Safari, showNotification em foreground é bloqueado — só o Toast funciona.
-      // O banner nativo (background) é gerenciado exclusivamente pelo Service Worker.
+      // 4. Exibe toast in-app quando chegar mensagem com o app em FOREGROUND
       const unsubscribe = onMessage(messaging, (payload) => {
         const { title, body } = payload.notification ?? {};
         if (!title) return;
-        
-        // Toast in-app: garante que o usuário veja a mensagem com o app aberto
+        console.log("[FCM] Mensagem em foreground recebida:", title, body);
         toast(`${title}\n${body ?? ""}`, {
-          icon: '💌',
+          icon: "💌",
           duration: 5000,
         });
       });
 
       return unsubscribe;
-    } catch (err) {
-      console.warn("[FCM] Falha ao configurar push notifications:", err);
+
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : "Erro desconhecido ao configurar push.";
+      console.error("[FCM] ❌ Falha geral ao configurar push:", errMsg);
+      setPushStatus("error");
+      setPushError(errMsg);
     }
   }, [user]);
 
@@ -101,11 +145,12 @@ export function usePushNotifications(user: User | null) {
     try {
       const perm = await Notification.requestPermission();
       setPermission(perm);
+      console.log(`[FCM] Permissão de notificação: ${perm}`);
       if (perm === "granted") {
         setupPush();
       }
     } catch (err) {
-      console.error("Erro ao solicitar permissão", err);
+      console.error("[FCM] Erro ao solicitar permissão:", err);
     }
   };
 
@@ -121,5 +166,5 @@ export function usePushNotifications(user: User | null) {
     };
   }, [permission, setupPush]);
 
-  return { permission, requestPermission };
+  return { permission, requestPermission, pushStatus, pushError };
 }

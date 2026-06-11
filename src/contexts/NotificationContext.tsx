@@ -1,11 +1,13 @@
 import React, { createContext, useContext } from "react";
 import type { ReactNode } from "react";
-import { usePushNotifications } from "../hooks/usePushNotifications";
+import { usePushNotifications, type PushStatus } from "../hooks/usePushNotifications";
 import { useAuth } from "../hooks/useAuth";
 
 interface NotificationContextType {
   permission: NotificationPermission;
   requestPermission: () => Promise<void>;
+  pushStatus: PushStatus;
+  pushError: string | null;
 }
 
 const NotificationContext = createContext<NotificationContextType | null>(null);

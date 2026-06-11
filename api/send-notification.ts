@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getApps, initializeApp, cert } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 
 // ── Inicializa Firebase Admin SDK (singleton) ────────────────────────────────
@@ -33,9 +33,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (!getApps().length) {
-    return res.status(500).json({
-      error: "Configuração do servidor incompleta.",
-    });
+    return res.status(500).json({ error: "Configuração do servidor incompleta." });
   }
 
   // "target" é o nome do DESTINATÁRIO: "Arthur" ou "Zara"
@@ -49,35 +47,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const db = getFirestore();
+    const messaging = getMessaging();
 
-    // Busca diretamente o documento do destinatário pelo nome
-    const tokenDoc = await db
+    // Busca TODOS os tokens do destinatário (múltiplos dispositivos)
+    const tokensSnap = await db
       .collection("couples")
       .doc(COUPLE_ID)
       .collection("fcm_tokens")
-      .doc(target)
+      .where("user", "==", target)
       .get();
 
-    if (!tokenDoc.exists) {
+    if (tokensSnap.empty) {
       return res.status(404).json({
-        error: `${target} ainda não abriu o app ou não aceitou as notificações.`,
+        error: `${target} não tem nenhum dispositivo registrado. Peça para ${target} abrir o app, ` +
+          `instalar na Tela de Início (iPhone) e aceitar as notificações.`,
       });
     }
 
-    const fcmToken = tokenDoc.data()?.token;
+    // Deduplica tokens e associa ao docId para limpeza posterior
+    const tokenMap = new Map<string, string>(); // token -> docId
+    tokensSnap.forEach((docSnap) => {
+      const tkn = docSnap.data()?.token;
+      if (tkn && typeof tkn === "string" && tkn.length > 0) {
+        tokenMap.set(tkn, docSnap.id);
+      }
+    });
 
-    if (!fcmToken || typeof fcmToken !== "string" || fcmToken.length === 0) {
+    if (tokenMap.size === 0) {
       return res.status(404).json({
-        error: `Token FCM de ${target} está vazio. Peça para ${target} abrir o app novamente.`,
+        error: `Tokens de ${target} estão vazios. Peça para ${target} abrir o app novamente.`,
       });
     }
 
-    console.log(`[FCM] Enviando para ${target} (token: ...${fcmToken.slice(-8)})`);
+    const tokens = Array.from(tokenMap.keys());
+    console.log(`[FCM] Enviando para ${target}: ${tokens.length} token(s)`);
 
-    const messaging = getMessaging();
-    await messaging.send({
-      token: fcmToken,
-      // "notification" na raiz é OBRIGATÓRIO para a Apple entregar o Web Push em background
+    // Envia para todos os tokens de uma vez usando sendEachForMulticast
+    const multicastMessage = {
+      tokens,
       notification: {
         title: title ?? "CasalPay:",
         body:  message,
@@ -88,15 +95,79 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           badge: "/icon-192.png",
           tag:   "casalpay-love",
         },
+        fcmOptions: {
+          link: "/messages",
+        },
         headers: {
           Urgency: "high",
           TTL:     "60",
         },
       },
+    };
+
+    const batchResponse = await messaging.sendEachForMulticast(multicastMessage);
+
+    // Remove tokens inválidos do Firestore
+    const batch = db.batch();
+    let tokensRemoved = 0;
+    batchResponse.responses.forEach((resp, idx) => {
+      if (!resp.success) {
+        const errCode = resp.error?.code ?? "";
+        const isInvalidToken =
+          errCode.includes("registration-token-not-registered") ||
+          errCode.includes("invalid-registration-token") ||
+          errCode.includes("sender-id-mismatch") ||
+          errCode.includes("mismatched-credential");
+
+        if (isInvalidToken) {
+          const token = tokens[idx];
+          const docId = tokenMap.get(token);
+          if (docId) {
+            const docRef = db
+              .collection("couples")
+              .doc(COUPLE_ID)
+              .collection("fcm_tokens")
+              .doc(docId);
+            batch.delete(docRef);
+            tokensRemoved++;
+            console.warn(`[FCM] Token inválido removido: doc ${docId} (erro: ${errCode})`);
+          }
+        } else {
+          console.error(`[FCM] Falha no token ${idx}: ${errCode} — ${resp.error?.message}`);
+        }
+      }
     });
 
-    console.log(`[FCM] Notificação entregue para ${target} com sucesso.`);
-    return res.status(200).json({ ok: true, sent: 1 });
+    if (tokensRemoved > 0) {
+      await batch.commit();
+      console.log(`[FCM] ${tokensRemoved} token(s) inválido(s) removido(s) do Firestore.`);
+    }
+
+    const successCount = batchResponse.successCount;
+    const failureCount = batchResponse.failureCount;
+
+    console.log(`[FCM] Resultado: ${successCount} enviado(s), ${failureCount} falha(s).`);
+
+    if (successCount === 0) {
+      return res.status(502).json({
+        ok: false,
+        error: `Nenhum aparelho ativo encontrado para ${target}. ` +
+          `Todos os tokens eram inválidos e foram removidos. ` +
+          `Peça para ${target} abrir o app novamente para registrar o dispositivo.`,
+        attemptedCount: tokens.length,
+        successCount: 0,
+        failureCount,
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      target,
+      attemptedCount: tokens.length,
+      successCount,
+      failureCount,
+      sent: successCount,
+    });
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Erro interno desconhecido";

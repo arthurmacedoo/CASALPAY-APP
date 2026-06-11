@@ -35,10 +35,11 @@ const COLOR_MAP = {
 // ─── Componente principal ──────────────────────────────────────────────────
 export const MessagesPage: React.FC = () => {
   const { user } = useAuth();
-  const { permission, requestPermission } = useNotificationContext();
+  const { permission, requestPermission, pushStatus, pushError } = useNotificationContext();
   
   const [sending, setSending] = useState<string | null>(null);
   const [sent, setSent]       = useState<string | null>(null);
+  const [sentCount, setSentCount] = useState<number>(0);
   const [error, setError]     = useState<string | null>(null);
 
   const isOwner    = user?.email?.toLowerCase().startsWith("arthur");
@@ -69,16 +70,37 @@ export const MessagesPage: React.FC = () => {
         throw new Error(data.error ?? `Erro ${response.status}`);
       }
 
+      // Só mostra "Enviado!" se successCount > 0 (entrega real confirmada)
+      const confirmedCount = data.successCount ?? data.sent ?? 0;
+      if (confirmedCount === 0) {
+        throw new Error(
+          data.error ?? `Nenhum aparelho ativo encontrado para ${targetName}.`
+        );
+      }
+
+      setSentCount(confirmedCount);
       setSent(msg.id);
-      setTimeout(() => setSent(null), 3500);
+      setTimeout(() => { setSent(null); setSentCount(0); }, 3500);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Erro ao enviar";
       setError(message);
-      setTimeout(() => setError(null), 5000);
+      setTimeout(() => setError(null), 6000);
     } finally {
       setSending(null);
     }
   };
+
+  // Label do status de registro do dispositivo
+  const deviceStatusLabel = () => {
+    if (permission !== "granted") return null;
+    switch (pushStatus) {
+      case "registering": return { text: "Registrando este aparelho...", color: "text-accent-blue" };
+      case "registered":  return { text: "✅ Aparelho registrado", color: "text-accent-green" };
+      case "error":       return { text: `⚠️ ${pushError ?? "Não foi possível registrar este aparelho"}`, color: "text-accent-red" };
+      default:            return null;
+    }
+  };
+  const deviceStatus = deviceStatusLabel();
 
   return (
     <main
@@ -124,6 +146,15 @@ export const MessagesPage: React.FC = () => {
               </p>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── Status do dispositivo (após permissão concedida) ───────────────── */}
+      {deviceStatus && (
+        <div className="px-5 mt-2 animate-fade-in-up">
+          <p className={`text-xs text-center font-medium ${deviceStatus.color}`}>
+            {deviceStatus.text}
+          </p>
         </div>
       )}
 
@@ -206,7 +237,9 @@ export const MessagesPage: React.FC = () => {
                   isSent ? "text-accent-green" : "text-text-primary"
                 }`}
               >
-                {isSent ? "Enviado!" : msg.text}
+                {isSent
+                  ? `Enviado para ${sentCount} aparelho${sentCount !== 1 ? "s" : ""}!`
+                  : msg.text}
               </span>
 
               {/* Spinner overlay enquanto envia */}
