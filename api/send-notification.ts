@@ -91,9 +91,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
       webpush: {
         notification: {
-          icon:  "/icon-192.png",
-          badge: "/icon-192.png",
-          tag:   "casalpay-love",
+          icon:    "/icon-192.png",
+          badge:   "/icon-192.png",
+          tag:     "casalpay-love",
+          vibrate: [200, 100, 200],
         },
         fcmOptions: {
           link: "/messages",
