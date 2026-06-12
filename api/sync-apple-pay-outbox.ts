@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getApps, initializeApp, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import { processApplePayEvent } from "./webhook-apple-pay";
+import { processApplePayEvent } from "./webhook-apple-pay.js";
 
 // ── Firebase Admin (singleton) ────────────────────────────────────────────────
 if (!getApps().length) {
