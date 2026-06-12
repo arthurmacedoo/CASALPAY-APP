@@ -26,6 +26,16 @@ function getMonthKey(date: string): string {
 }
 
 /**
+ * Sanitiza um clientEventId para uso seguro como ID de documento Firestore.
+ * Remove caracteres inválidos; trunca para 128 chars.
+ */
+function sanitizeEventId(raw: string): string {
+  return raw
+    .replace(/[\/\\.\s#$\[\]]/g, "_")
+    .slice(0, 128);
+}
+
+/**
  * Higieniza e converte um valor monetário para centavos.
  * Aceita: "R$ 15,90", "15.90", " 15,90 ", "BRL 15.90", "1590" etc.
  * Retorna null se o resultado for zero, negativo ou não-numérico.
@@ -49,21 +59,16 @@ function toCents(value: unknown): number | null {
   const hasDot   = raw.includes(".");
 
   if (hasComma && hasDot) {
-    // Formato europeu: 1.234,56
     const lastComma = raw.lastIndexOf(",");
     const lastDot   = raw.lastIndexOf(".");
     if (lastComma > lastDot) {
-      // vírgula é decimal
       raw = raw.replace(/\./g, "").replace(",", ".");
     } else {
-      // ponto é decimal
       raw = raw.replace(/,/g, "");
     }
   } else if (hasComma) {
-    // Só vírgula → decimal brasileiro: 15,90
     raw = raw.replace(",", ".");
   }
-  // Se só tem ponto: já está no formato correto (15.90)
 
   const num = parseFloat(raw);
   if (isNaN(num) || num <= 0) return null;
@@ -82,8 +87,8 @@ function todayISO(): string {
 }
 
 // ── Resultado da validação ────────────────────────────────────────────────────
-// Usamos um objeto simples com campo errorReason opcional para evitar
-// problemas de narrowing de union types no compilador do Vercel.
+// Objeto simples com errorReason opcional para evitar problemas de narrowing
+// de union types no compilador do Vercel.
 type ValidationResult = {
   amountCents: number;    // 0 = falha
   description: string;
@@ -140,7 +145,7 @@ async function saveFallbackExpense(
   const docData = {
     type:        "expense",
     description: `⚠️ Erro Apple Pay: ${reason}`,
-    amount:      1,              // 1 centavo simbólico
+    amount:      1,
     date:        fallbackDate,
     monthKey:    getMonthKey(fallbackDate),
     coupleId,
@@ -165,8 +170,8 @@ async function saveFallbackExpense(
 
 /**
  * Envia uma notificação para TODOS os tokens FCM do casal de uma vez.
- * Usa sendEachForMulticast para evitar notificações duplicadas no mesmo aparelho.
- * É best-effort: nunca lança exceção.
+ * Usa sendEachForMulticast para evitar notificações duplicadas.
+ * Best-effort: nunca lança exceção.
  */
 async function sendCriticalAlert(
   db: FirebaseFirestore.Firestore,
@@ -178,7 +183,6 @@ async function sendCriticalAlert(
   try {
     const messaging = getMessaging();
 
-    // Coleta todos os tokens únicos do casal
     const tokensSnap = await db
       .collection("couples")
       .doc(coupleId)
@@ -198,7 +202,6 @@ async function sendCriticalAlert(
       return;
     }
 
-    // Envia uma única chamada para todos os tokens (evita duplicatas)
     const response = await messaging.sendEachForMulticast({
       tokens,
       notification: {
@@ -209,7 +212,7 @@ async function sendCriticalAlert(
         notification: {
           icon:  "/icon-192.png",
           badge: "/icon-192.png",
-          tag:   "casalpay-critical-alert", // tag única: substitui a anterior em vez de empilhar
+          tag:   "casalpay-critical-alert",
         },
         headers: { Urgency: "high", TTL: "300" },
       },
@@ -222,6 +225,176 @@ async function sendCriticalAlert(
   }
 }
 
+/**
+ * Verifica idempotência via coleção apple_pay_events.
+ * Retorna o ID da transação existente se for duplicata, ou null se for novo.
+ *
+ * Estrutura Firestore:
+ *   couples/{coupleId}/apple_pay_events/{sanitizedEventId}
+ *     → { transactionId, amountCents, description, date, processedAt }
+ */
+async function checkAndRegisterEvent(
+  db: FirebaseFirestore.Firestore,
+  coupleId: string,
+  eventId: string
+): Promise<string | null> {
+  const sanitized = sanitizeEventId(eventId);
+  const eventRef = db
+    .collection("couples")
+    .doc(coupleId)
+    .collection("apple_pay_events")
+    .doc(sanitized);
+
+  const snap = await eventRef.get();
+  if (snap.exists) {
+    // Já foi processado — retorna o ID da transação original
+    const data = snap.data() as { transactionId?: string };
+    return data.transactionId ?? "__unknown__";
+  }
+  return null; // ainda não processado
+}
+
+/**
+ * Registra o evento como processado após criar a transação.
+ */
+async function markEventProcessed(
+  db: FirebaseFirestore.Firestore,
+  coupleId: string,
+  eventId: string,
+  transactionId: string,
+  meta: { amountCents: number; description: string; date: string }
+): Promise<void> {
+  const sanitized = sanitizeEventId(eventId);
+  await db
+    .collection("couples")
+    .doc(coupleId)
+    .collection("apple_pay_events")
+    .doc(sanitized)
+    .set({
+      transactionId,
+      amountCents:  meta.amountCents,
+      description:  meta.description,
+      date:         meta.date,
+      processedAt:  FieldValue.serverTimestamp(),
+    });
+}
+
+// ── Lógica central reutilizável (usada pelo webhook e pelo sync) ───────────────
+
+export type ProcessEventResult = {
+  ok: boolean;
+  id: string;
+  duplicate?: boolean;
+  fallback?: boolean;
+  reason?: string;
+  idempotent: boolean;
+  warning?: string;
+};
+
+/**
+ * Processa um único evento Apple Pay de forma idempotente.
+ * Reutilizado pelo webhook individual e pelo endpoint de sync em lote.
+ */
+export async function processApplePayEvent(
+  db: FirebaseFirestore.Firestore,
+  coupleId: string,
+  rawBody: Record<string, unknown>
+): Promise<ProcessEventResult> {
+  const clientEventId = typeof rawBody.clientEventId === "string"
+    ? rawBody.clientEventId.trim()
+    : "";
+
+  // ── Idempotência ──────────────────────────────────────────────────────────
+  if (clientEventId) {
+    const existingId = await checkAndRegisterEvent(db, coupleId, clientEventId);
+    if (existingId) {
+      console.log(`[webhook] Evento duplicado ignorado: clientEventId="${clientEventId}" → transação="${existingId}"`);
+      return { ok: true, duplicate: true, id: existingId, idempotent: true };
+    }
+  }
+
+  // ── Validação ─────────────────────────────────────────────────────────────
+  const validation = validateBody(rawBody);
+
+  if (validation.errorReason) {
+    const reason = validation.errorReason;
+    console.warn(`[webhook] Validação falhou — ${reason} | clientEventId="${clientEventId}"`);
+
+    const fallbackId = await saveFallbackExpense(db, coupleId, reason, rawBody);
+
+    // Registra o evento de fallback também (evita spam duplicado)
+    if (clientEventId) {
+      await markEventProcessed(db, coupleId, clientEventId, fallbackId, {
+        amountCents: 0,
+        description: `fallback: ${reason}`,
+        date:        validation.finalDate,
+      });
+    }
+
+    return {
+      ok:        false,
+      fallback:  true,
+      id:        fallbackId,
+      reason,
+      idempotent: Boolean(clientEventId),
+    };
+  }
+
+  // ── Cria transação Pendente ───────────────────────────────────────────────
+  const { amountCents, description, finalDate } = validation;
+  const monthKey = getMonthKey(finalDate);
+
+  const docData = {
+    type:        "expense",
+    description,
+    amount:      amountCents,
+    date:        finalDate,
+    monthKey,
+    coupleId,
+    paidBy:      "partner",
+    splitType:   "100% partner",
+    visibility:  "personal",
+    status:      "pending",
+    source:      rawBody.source ?? "webhook-apple-pay",
+    clientEventId: clientEventId || null,
+    deviceUser:  rawBody.deviceUser ?? null,
+    capturedAt:  rawBody.capturedAt ?? null,
+    createdAt:   FieldValue.serverTimestamp(),
+    updatedAt:   FieldValue.serverTimestamp(),
+  };
+
+  const ref = await db
+    .collection("couples")
+    .doc(coupleId)
+    .collection("transactions")
+    .add(docData);
+
+  console.log(
+    `[webhook] Despesa criada: id="${ref.id}" | desc="${description}" | R$ ${(amountCents / 100).toFixed(2)} | clientEventId="${clientEventId}"`
+  );
+
+  // Registra o evento como processado para deduplicação futura
+  if (clientEventId) {
+    await markEventProcessed(db, coupleId, clientEventId, ref.id, {
+      amountCents,
+      description,
+      date: finalDate,
+    });
+  }
+
+  const result: ProcessEventResult = {
+    ok:         true,
+    id:         ref.id,
+    idempotent: Boolean(clientEventId),
+  };
+
+  if (!clientEventId) {
+    result.warning = "clientEventId ausente: este envio não é idempotente. Reenvios podem criar duplicatas.";
+  }
+
+  return result;
+}
+
 // ── Handler Principal ──────────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -231,7 +404,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST")   return res.status(405).json({ error: "Method not allowed" });
 
-  // ── Segurança: Bearer token ────────────────────────────────────────────────
+  // ── Autenticação ──────────────────────────────────────────────────────────
   const authHeader     = req.headers.authorization ?? "";
   const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 
@@ -254,64 +427,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const rawBody   = (req.body ?? {}) as Record<string, unknown>;
 
   try {
-    // ── Validação Inteligente ─────────────────────────────────────────────────
-    const validation = validateBody(rawBody);
+    const result = await processApplePayEvent(db, COUPLE_ID, rawBody);
 
-    if (validation.errorReason) {
-      const reason = validation.errorReason;
-      console.warn(`[webhook] Validação falhou — ${reason}`, rawBody);
-
-      const fallbackId = await saveFallbackExpense(db, COUPLE_ID, reason, rawBody);
-
+    // Alert FCM apenas em falhas reais (não duplicatas nem warnings de idempotência)
+    if (result.fallback) {
       await sendCriticalAlert(
         db,
         COUPLE_ID,
-        `Compra Apple Pay com valor irrecuperável. Motivo: "${reason}". Verifique a aba Pendentes.`
+        `Compra Apple Pay com valor irrecuperável. Motivo: "${result.reason}". Verifique a aba Pendentes.`
       );
-
-      return res.status(200).json({
-        ok:       false,
-        fallback: true,
-        id:       fallbackId,
-        reason,
-        message:  "Valor irrecuperável. Despesa de alerta criada nos Pendentes.",
-      });
     }
 
-    // ── Dados válidos: grava despesa Pendente normal ───────────────────────────
-    const { amountCents, description, finalDate } = validation;
-    const monthKey = getMonthKey(finalDate);
+    const httpStatus = result.ok
+      ? (result.duplicate ? 200 : 201)
+      : 200; // fallback retorna 200 (aceito com aviso)
 
-    const docData = {
-      type:        "expense",
-      description,
-      amount:      amountCents,
-      date:        finalDate,
-      monthKey,
-      coupleId:    COUPLE_ID,
-      paidBy:      "partner",
-      splitType:   "100% partner",
-      visibility:  "personal",
-      status:      "pending",
-      source:      "webhook-apple-pay",
-      createdAt:   FieldValue.serverTimestamp(),
-      updatedAt:   FieldValue.serverTimestamp(),
-    };
-
-    const ref = await db
-      .collection("couples")
-      .doc(COUPLE_ID)
-      .collection("transactions")
-      .add(docData);
-
-    console.log(`[webhook] Despesa criada: ${ref.id} — ${description} — R$ ${(amountCents / 100).toFixed(2)}`);
-
-    return res.status(201).json({
-      ok:      true,
-      id:      ref.id,
-      amount:  amountCents,
-      date:    finalDate,
-      monthKey,
+    return res.status(httpStatus).json({ ...result, amount: result.ok && !result.duplicate
+      ? undefined  // amount já vai no result quando necessário
+      : undefined,
     });
 
   } catch (err: unknown) {
@@ -325,7 +458,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         "Falha crítica ao registrar compra no Apple Pay. Verifique o sistema."
       );
     } catch {
-      // silencia — erro primário já foi logado
+      // silencia
     }
 
     return res.status(500).json({ error: "Internal server error", detail: msg });
