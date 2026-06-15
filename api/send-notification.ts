@@ -102,6 +102,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         headers: {
           Urgency: "high",
           TTL:     "60",
+          Topic:   "casalpay-msg",
+        },
+      },
+      apns: {
+        headers: {
+          "apns-collapse-id": "casalpay-msg",
         },
       },
     };
