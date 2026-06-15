@@ -121,7 +121,9 @@ export function usePushNotifications(user: User | null) {
 
       // 4. Exibe toast in-app quando chegar mensagem com o app em FOREGROUND
       const unsubscribe = onMessage(messaging, (payload) => {
-        const { title, body } = payload.notification ?? {};
+        const title = payload.notification?.title || payload.data?.title;
+        const body = payload.notification?.body || payload.data?.body;
+        
         if (!title) return;
         console.log("[FCM] Mensagem em foreground recebida:", title, body);
         toast(`${title}\n${body ?? ""}`, {

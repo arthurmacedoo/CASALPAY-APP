@@ -85,24 +85,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Envia para todos os tokens de uma vez usando sendEachForMulticast
     const multicastMessage = {
       tokens,
-      notification: {
+      data: {
         title: title ?? "CasalPay:",
-        body:  message,
+        body: message,
+        url: "/messages",
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        tag: "casalpay-love",
       },
       webpush: {
-        notification: {
-          icon:    "/icon-192.png",
-          badge:   "/icon-192.png",
-          tag:     "casalpay-love",
-          vibrate: [200, 100, 200],
-        },
-        fcmOptions: {
-          link: "/messages",
-        },
         headers: {
           Urgency: "high",
-          TTL:     "60",
-          Topic:   "casalpay-msg",
+          TTL: "60",
+          Topic: "casalpay-msg",
         },
       },
       apns: {
