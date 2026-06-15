@@ -8,6 +8,7 @@ import { HistoryPage } from "./pages/History";
 import { MessagesPage } from "./pages/Messages";
 import { LoginPage } from "./pages/Login";
 import { NotificationProvider } from "./contexts/NotificationContext";
+import { GroupProvider } from "./contexts/GroupContext";
 import { Toaster } from "react-hot-toast";
 import { isFirebaseConfigured, firebaseConfigError } from "./lib/firebase";
 
@@ -41,20 +42,22 @@ const ErrorScreen: React.FC<{ message: string }> = ({ message }) => (
 // Componente interno que só monta quando autenticado — hook pode ser chamado sem violar regras
 const AuthenticatedApp: React.FC = () => {
   return (
-    <NotificationProvider>
-      <Toaster position="top-center" toastOptions={{ duration: 4000, style: { background: '#333', color: '#fff', borderRadius: '12px' } }} />
-      <BrowserRouter>
-        <div className="flex flex-col min-h-screen min-h-dvh safe-top">
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/add" element={<AddExpensePage />} />
-            <Route path="/history" element={<HistoryPage />} />
-            <Route path="/messages" element={<MessagesPage />} />
-          </Routes>
-          <BottomNav />
-        </div>
-      </BrowserRouter>
-    </NotificationProvider>
+    <GroupProvider>
+      <NotificationProvider>
+        <Toaster position="top-center" toastOptions={{ duration: 4000, style: { background: '#333', color: '#fff', borderRadius: '12px' } }} />
+        <BrowserRouter>
+          <div className="flex flex-col min-h-screen min-h-dvh safe-top">
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/add" element={<AddExpensePage />} />
+              <Route path="/history" element={<HistoryPage />} />
+              <Route path="/messages" element={<MessagesPage />} />
+            </Routes>
+            <BottomNav />
+          </div>
+        </BrowserRouter>
+      </NotificationProvider>
+    </GroupProvider>
   );
 };
 

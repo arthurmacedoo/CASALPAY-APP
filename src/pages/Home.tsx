@@ -10,9 +10,11 @@ import { getCurrentMonthKey, formatMonthLabel, formatBRL, formatDateBR } from ".
 import { BalanceCard } from "../components/BalanceCard";
 import { TransactionItem } from "../components/TransactionItem";
 import { AnniversaryCountdown } from "../components/AnniversaryCountdown";
+import { GroupSwitcherSheet } from "../components/GroupSwitcherSheet";
 import { Button } from "../components/ui/Button";
 import type { Transaction } from "../types";
 import { PARTNER_NAME, OWNER_NAME } from "../constants/couple";
+import { useGroupContext } from "../contexts/GroupContext";
 
 
 type ViewMode = "shared" | "zara" | "pending";
@@ -109,11 +111,13 @@ const PendingTransactionCard: React.FC<{
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
   const currentMonth = getCurrentMonthKey();
+  const { group } = useGroupContext();
 
   const { transactions, loading, error } = useTransactions(currentMonth);
   const { pendingTransactions, pendingCount, loading: pendingLoading } = usePendingTransactions();
 
   const [copied, setCopied] = useState(false);
+  const [isGroupSheetOpen, setIsGroupSheetOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     return (sessionStorage.getItem("casalpay_viewMode") as ViewMode) || "shared";
   });
@@ -224,11 +228,37 @@ export const HomePage: React.FC = () => {
     <main className="flex-1 overflow-y-auto pb-24">
       {/* Header */}
       <header className="px-6 pt-12 pb-4">
-        <h1 className="text-2xl font-bold tracking-tight text-text-primary">
-          {OWNER_NAME} e {PARTNER_NAME}
-        </h1>
+        {/* Grupo ativo com botão de troca */}
+        <button
+          id="btn-group-switcher"
+          onClick={() => setIsGroupSheetOpen(true)}
+          className="flex items-center gap-2 group mb-0.5 -ml-0.5 px-1 py-0.5 rounded-xl transition-colors hover:bg-white/5 active:bg-white/10"
+          aria-label="Trocar grupo ativo"
+        >
+          <h1 className="text-2xl font-bold tracking-tight text-text-primary">
+            {group?.name ?? `${OWNER_NAME} e ${PARTNER_NAME}`}
+          </h1>
+          {/* Chevron animado */}
+          <svg
+            className="w-5 h-5 text-text-muted mt-0.5 transition-transform duration-200 group-hover:translate-y-0.5"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path
+              fillRule="evenodd"
+              d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </button>
         <p className="text-text-muted text-sm font-medium">Divisão de despesas</p>
       </header>
+
+      {/* Bottom Sheet de troca de grupo */}
+      <GroupSwitcherSheet
+        isOpen={isGroupSheetOpen}
+        onClose={() => setIsGroupSheetOpen(false)}
+      />
 
       <div className="px-5 flex flex-col gap-4">
 

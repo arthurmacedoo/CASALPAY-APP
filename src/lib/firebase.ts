@@ -101,3 +101,26 @@ export const transactionDocRef = (id: string) =>
 /** Coleção de tokens FCM do casal */
 export const fcmTokensRef = () =>
   collection(db, "couples", COUPLE_ID, "fcm_tokens");
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Referências para a nova arquitetura multi-grupo (Etapa 1+)
+// Estrutura definitiva: /groups/{groupId}/...
+// Etapa 1: transactions/fcm_tokens/apple_pay_events ainda em /couples/{coupleId}/...
+// Etapa 1.5: migração física para /groups/{groupId}/...
+// ────────────────────────────────────────────────────────────────────────────────
+
+/** Documento de um grupo específico */
+export const groupDocRef = (groupId: string) =>
+  doc(db, "groups", groupId);
+
+/** Subcoleção de membros de um grupo */
+export const groupMembersRef = (groupId: string) =>
+  collection(db, "groups", groupId, "members");
+
+/** Documento de um membro específico de um grupo */
+export const groupMemberDocRef = (groupId: string, userId: string) =>
+  doc(db, "groups", groupId, "members", userId);
+
+/** Documento de perfil do usuário (users/{userId}) */
+export const userDocRef = (userId: string) =>
+  doc(db, "users", userId);
