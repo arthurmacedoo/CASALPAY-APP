@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTransactions } from "../hooks/useTransactions";
 import type {
@@ -12,9 +12,7 @@ import { parseToCents, getMonthKey } from "../lib/calculations";
 import { getTodayDateString, getCurrentMonthKey, formatBRL } from "../lib/formatters";
 import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
-import { OWNER_NAME, PARTNER_NAME, OWNER_EMOJI, PARTNER_EMOJI } from "../constants/couple";
 import { useGroupContext } from "../contexts/GroupContext";
-import { getLegacyRoleForMember } from "../lib/transactionVisibility";
 
 const initialExpenseData: ExpenseFormData = {
   type: "expense",
@@ -60,9 +58,8 @@ export const AddExpensePage: React.FC = () => {
   const { addTransaction, updateTransaction } = useTransactions(monthKey);
   const { members } = useGroupContext();
 
-  // Membros legados por papel (baseado no nome, não no role do Firestore)
-  const ownerMember = useMemo(() => members.find(m => getLegacyRoleForMember(m) === "owner") ?? null, [members]);
-  const partnerMember = useMemo(() => members.find(m => getLegacyRoleForMember(m) === "partner") ?? null, [members]);
+  const member1 = members[0];
+  const member2 = members[1];
 
   const [form, setForm] = useState<TransactionFormData>(
     editTransaction
@@ -97,25 +94,25 @@ export const AddExpensePage: React.FC = () => {
   useEffect(() => {
     if (form.type !== "expense") return;
     if (form.splitType === "100% owner") {
-      setForm(f => ({ ...f, personalOwnerUserId: ownerMember?.userId ?? null }));
+      setForm(f => ({ ...f, personalOwnerUserId: member1?.userId ?? null }));
     } else if (form.splitType === "100% partner") {
-      setForm(f => ({ ...f, personalOwnerUserId: partnerMember?.userId ?? null }));
+      setForm(f => ({ ...f, personalOwnerUserId: member2?.userId ?? null }));
     } else {
       setForm(f => ({ ...f, personalOwnerUserId: null }));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.type === "expense" ? form.splitType : undefined, ownerMember?.userId, partnerMember?.userId]);
+  }, [form.type === "expense" ? form.splitType : undefined, member1?.userId, member2?.userId]);
 
   // Auto-seleciona Zara quando pixDestination é zara_card
   useEffect(() => {
     if (form.type !== "settlement") return;
     if (form.pixDestination === "zara_card") {
-      setForm(f => ({ ...f, personalOwnerUserId: partnerMember?.userId ?? null }));
+      setForm(f => ({ ...f, personalOwnerUserId: member2?.userId ?? null }));
     } else {
       setForm(f => ({ ...f, personalOwnerUserId: null }));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.type === "settlement" ? form.pixDestination : undefined, partnerMember?.userId]);
+  }, [form.type === "settlement" ? form.pixDestination : undefined, member2?.userId]);
 
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof TransactionFormData | "personalOwnerUserId", string>> = {};
@@ -162,8 +159,8 @@ export const AddExpensePage: React.FC = () => {
         // Infere dono para parcelas se a UI não forneceu
         if (!submitData.personalOwnerUserId) {
           submitData.personalOwnerUserId = submitData.paidBy === "owner"
-            ? ownerMember?.userId ?? null
-            : partnerMember?.userId ?? null;
+            ? member1?.userId ?? null
+            : member2?.userId ?? null;
         }
       }
 
@@ -381,14 +378,14 @@ export const AddExpensePage: React.FC = () => {
                   onClick={() => setForm((f) => f.type === "expense" ? { ...f, paidBy: "owner" } : f)}
                   className={`chip ${form.paidBy === "owner" ? "chip-selected-blue" : ""}`}
                 >
-                  {OWNER_EMOJI} {OWNER_NAME}
+                  {member1 ? `👤 ${member1.name}` : "Membro 1"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setForm((f) => f.type === "expense" ? { ...f, paidBy: "partner" } : f)}
                   className={`chip ${form.paidBy === "partner" ? "chip-selected-pink" : ""}`}
                 >
-                  {PARTNER_EMOJI} {PARTNER_NAME}
+                  {member2 ? `👤 ${member2.name}` : "Membro 2"}
                 </button>
               </div>
             </div>
@@ -403,8 +400,8 @@ export const AddExpensePage: React.FC = () => {
                   {(["50/50", "100% owner", "100% partner"] as SplitType[]).map((type) => {
                     const labels: Record<SplitType, string> = {
                       "50/50": "⚖️ Meio a Meio",
-                      "100% owner": `${OWNER_EMOJI} Só ${OWNER_NAME}`,
-                      "100% partner": `${PARTNER_EMOJI} Só ${PARTNER_NAME}`,
+                      "100% owner": `Só ${member1?.name || "Membro 1"}`,
+                      "100% partner": `Só ${member2?.name || "Membro 2"}`,
                     };
                     const isSelected = form.splitType === type;
                     const colorClass =
@@ -444,14 +441,14 @@ export const AddExpensePage: React.FC = () => {
                   onClick={() => setForm((f) => f.type === "settlement" ? { ...f, from: "owner", to: "partner" } : f)}
                   className={`chip ${form.from === "owner" ? "chip-selected-blue" : ""}`}
                 >
-                  {OWNER_EMOJI} {OWNER_NAME}
+                  {member1 ? `👤 ${member1.name}` : "Membro 1"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setForm((f) => f.type === "settlement" ? { ...f, from: "partner", to: "owner" } : f)}
                   className={`chip ${form.from === "partner" ? "chip-selected-pink" : ""}`}
                 >
-                  {PARTNER_EMOJI} {PARTNER_NAME}
+                  {member2 ? `👤 ${member2.name}` : "Membro 2"}
                 </button>
               </div>
             </div>
@@ -490,10 +487,9 @@ export const AddExpensePage: React.FC = () => {
               Vai aparecer só na fatura do membro selecionado.
             </p>
             <div className="flex gap-2 flex-wrap">
-              {members.map((m) => {
-                const legacyRole = getLegacyRoleForMember(m);
-                const chipClass = legacyRole === "owner" ? "chip-selected-blue" : "chip-selected-pink";
-                const emoji = legacyRole === "owner" ? OWNER_EMOJI : PARTNER_EMOJI;
+              {members.map((m, index) => {
+                const isFirst = index === 0;
+                const chipClass = isFirst ? "chip-selected-blue" : "chip-selected-pink";
                 const isSelected = form.personalOwnerUserId === m.userId;
                 return (
                   <button
@@ -502,7 +498,7 @@ export const AddExpensePage: React.FC = () => {
                     onClick={() => setForm((f) => ({ ...f, personalOwnerUserId: m.userId }))}
                     className={`chip active:scale-95 transition-all ${isSelected ? chipClass : ""}`}
                   >
-                    {emoji} {m.name}
+                    👤 {m.name}
                   </button>
                 );
               })}

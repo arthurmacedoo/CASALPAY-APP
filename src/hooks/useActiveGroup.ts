@@ -19,17 +19,19 @@ import {
   writeBatch,
   doc,
   arrayUnion,
+  query,
+  where,
+  getDocs,
+  arrayRemove,
 } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import {
   db,
   groupDocRef,
   userDocRef,
-  COUPLE_ID,
 } from "../lib/firebase";
 import type { Group, GroupMember, ActiveGroupState } from "../types";
 
-const DEFAULT_GROUP_ID = COUPLE_ID; // "arthur-namorada-2026" durante Etapa 1
 
 export interface UseActiveGroupReturn extends ActiveGroupState {
   /** Altera o grupo ativo do usuário (salva em users/{uid}.activeGroupId) */
@@ -38,6 +40,7 @@ export interface UseActiveGroupReturn extends ActiveGroupState {
   updateGroup: (newName: string) => Promise<void>;
   deleteGroup: () => Promise<void>;
   joinGroup: (groupId: string) => Promise<void>;
+  removeMember: (userId: string) => Promise<void>;
   activeGroupId: string | null;
 }
 
@@ -52,13 +55,18 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
   const currentUserRole = currentMember?.role;
   const isCurrentUserAdmin = Boolean(user && group && group.createdBy === user.uid);
 
+  const clearActiveGroup = useCallback(() => {
+    localStorage.removeItem('casalpay_active_group');
+    setGroup(null);
+    setMembers([]);
+    setLoading(false);
+    setActiveGroupId(null);
+  }, []);
+
   // ── 1. Resolve qual groupId está ativo para este usuário ─────────────────
   useEffect(() => {
     if (!user) {
-      setGroup(null);
-      setMembers([]);
-      setLoading(false);
-      setActiveGroupId(null);
+      clearActiveGroup();
       return;
     }
 
@@ -77,12 +85,20 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
 
         if (!cancelled) {
           setActiveGroupId(resolvedId);
+          // Se não houver grupo, precisamos tirar do loading explicitamente,
+          // pois o useEffect do activeGroupId não será trigado se o valor já era null
+          if (!resolvedId) {
+            setLoading(false);
+          }
         }
-      } catch (err) {
+      } catch (err: any) {
         if (!cancelled) {
-          console.error("[useActiveGroup] Erro ao resolver groupId:", err);
-          // Zero fallback para usuários novos sem grupo ativo
-          setActiveGroupId(null);
+          if (err.code === "permission-denied") {
+            clearActiveGroup();
+          } else {
+            setActiveGroupId(null);
+            setLoading(false);
+          }
         }
       }
     };
@@ -101,28 +117,18 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
         if (snap.exists()) {
           setGroup({ id: snap.id, ...snap.data() } as Group);
         } else {
-          // Grupo não existe ainda (antes de rodar o script de migração)
-          // Cria um estado fantasma para não travar o app
-          setGroup({
-            id: activeGroupId,
-            name: "Grupo Arthur e Zara",
-            createdBy: "",
-            createdAt: null as any,
-            updatedAt: null as any,
-            legacyCoupleId: COUPLE_ID,
-          });
+          setError("Grupo não encontrado.");
+          setGroup(null);
         }
         setLoading(false);
       },
-      (err: Error & { code?: string }) => {
-        if (err.code === "permission-denied") {
-          setGroup(null);
-          setMembers([]);
+      (error: any) => {
+        if (error.code === 'permission-denied') {
+          setError("Sem permissão para acessar este grupo.");
           setLoading(false);
-          setActiveGroupId(null);
         } else {
-          console.error("[useActiveGroup] Erro ao ouvir grupo:", err.message);
-          setError(err.message);
+          console.error("Erro inesperado no snapshot de grupo:", error);
+          setError(`Erro: ${error.message}`);
           setLoading(false);
         }
       }
@@ -141,17 +147,18 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
         const docs: GroupMember[] = snap.docs.map(
           (d) => ({ userId: d.id, ...d.data() } as GroupMember)
         );
-        setMembers(docs);
+        // Garantir que a array seja resetada/sobrescrita e sem duplicação (proteção adicional)
+        const uniqueMembers = Array.from(new Map(docs.map(m => [m.userId, m])).values());
+        setMembers(uniqueMembers);
       },
-      (err: Error & { code?: string }) => {
-        if (err.code === "permission-denied") {
-          setGroup(null);
-          setMembers([]);
+      (error: any) => {
+        if (error.code === 'permission-denied') {
+          setError("Sem permissão para acessar membros.");
           setLoading(false);
-          setActiveGroupId(null);
         } else {
-          console.warn("[useActiveGroup] Erro ao ouvir membros:", err.message);
-          // Não bloqueia o app — membros são exibidos se disponíveis
+          console.error("Erro inesperado no snapshot de membros:", error);
+          setError(`Erro: ${error.message}`);
+          setLoading(false);
         }
       }
     );
@@ -181,6 +188,12 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
     async (name: string) => {
       if (!user) return;
 
+      const q = query(collection(db, 'groups'), where('memberIds', 'array-contains', user.uid));
+      const userGroupsSnap = await getDocs(q);
+      if (userGroupsSnap.size >= 4) {
+        throw new Error("Você atingiu o limite máximo de 4 grupos.");
+      }
+
       const newGroupRef = doc(collection(db, 'groups'));
       const memberRef = doc(db, 'groups', newGroupRef.id, 'members', user.uid);
       const userProfileRef = userDocRef(user.uid);
@@ -199,7 +212,6 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
         createdBy: user.uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        type: 'standard' as const,
         memberIds: [user.uid],
       });
 
@@ -229,7 +241,7 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
   );
 
   const updateGroup = useCallback(async (newName: string) => {
-    if (!user || !activeGroupId || !isCurrentUserAdmin || activeGroupId === COUPLE_ID) return;
+    if (!user || !activeGroupId || !isCurrentUserAdmin) return;
     try {
       await setDoc(groupDocRef(activeGroupId), { 
         name: newName.trim(), 
@@ -242,7 +254,7 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
   }, [user, activeGroupId, isCurrentUserAdmin]);
 
   const deleteGroup = useCallback(async () => {
-    if (!user || !activeGroupId || !isCurrentUserAdmin || activeGroupId === COUPLE_ID) return;
+    if (!user || !activeGroupId || !isCurrentUserAdmin) return;
     try {
       const batch = writeBatch(db);
       
@@ -252,16 +264,16 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
       // 2. Exclui o membro do criador para limpar a subcoleção
       batch.delete(doc(db, 'groups', activeGroupId, 'members', user.uid));
       
-      // 3. Reseta o usuário para o grupo legado
+      // 3. Reseta o activeGroupId
       batch.set(userDocRef(user.uid), { 
-        activeGroupId: COUPLE_ID, 
+        activeGroupId: null, 
         updatedAt: serverTimestamp() 
       }, { merge: true });
 
       await batch.commit();
       
       // Atualiza o estado local imediatamente
-      setActiveGroupId(COUPLE_ID);
+      setActiveGroupId(null);
     } catch (err) {
       console.error("[CasalPay] Erro ao excluir grupo:", err);
       throw err;
@@ -281,6 +293,12 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
     const groupSnap = await getDoc(groupRef);
     if (!groupSnap.exists()) {
       throw new Error("Grupo não encontrado. Verifique o código.");
+    }
+
+    const q = query(collection(db, 'groups'), where('memberIds', 'array-contains', user.uid));
+    const userGroupsSnap = await getDocs(q);
+    if (userGroupsSnap.size >= 4) {
+      throw new Error("Você atingiu o limite máximo de 4 grupos.");
     }
 
     const displayName = user.displayName ?? user.email?.split('@')[0] ?? 'Convidado';
@@ -314,6 +332,29 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
     setActiveGroupId(groupId);
   }, [user]);
 
+  const removeMember = useCallback(async (targetUserId: string) => {
+    if (!user || !activeGroupId || !isCurrentUserAdmin) return;
+    if (targetUserId === user.uid) throw new Error("Você não pode remover a si mesmo.");
+
+    try {
+      const batch = writeBatch(db);
+      
+      // 1. Remove o UID do array principal
+      batch.update(groupDocRef(activeGroupId), {
+        memberIds: arrayRemove(targetUserId),
+        updatedAt: serverTimestamp()
+      });
+      
+      // 2. Remove o documento da subcoleção members
+      batch.delete(doc(db, 'groups', activeGroupId, 'members', targetUserId));
+      
+      await batch.commit();
+    } catch (err) {
+      console.error("[CasalPay] Erro ao remover membro:", err);
+      throw err;
+    }
+  }, [user, activeGroupId, isCurrentUserAdmin]);
+
   return { 
     group, 
     members, 
@@ -325,6 +366,7 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
     updateGroup,
     deleteGroup,
     joinGroup,
+    removeMember,
     currentMember,
     currentUserRole,
     isCurrentUserAdmin

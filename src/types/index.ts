@@ -22,13 +22,8 @@ export interface Group {
   createdBy: string;               // uid do criador
   createdAt: Timestamp;
   updatedAt: Timestamp;
-  /** Legado: aponta para couples/{coupleId} durante Etapa 1.
-   *  Será removido na Etapa 1.5 quando as coleções forem migradas. */
-  legacyCoupleId?: string;
-  /** 'legacy' = grupo migrado do couples. 'standard' = grupo novo criado na Etapa 3+. */
-  type?: 'legacy' | 'standard';
   /** IDs de todos os membros (usado para query array-contains) */
-  memberIds?: string[];
+  memberIds: string[];
 }
 
 /** Estado do contexto de grupo ativo. */

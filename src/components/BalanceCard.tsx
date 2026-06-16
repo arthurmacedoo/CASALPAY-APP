@@ -1,7 +1,7 @@
 import React from "react";
 import type { BalanceSummary } from "../types";
 import { formatBRL, formatMonthLabel } from "../lib/formatters";
-import { useAuth } from "../hooks/useAuth";
+import { useAuthContext } from "../contexts/AuthContext";
 import { OWNER_EMOJI, PARTNER_EMOJI } from "../constants/couple";
 
 interface BalanceCardProps {
@@ -24,7 +24,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
   const isEven = netBalance === 0;
   const zaraOwes = netBalance > 0;
 
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const isArthur = user?.email?.toLowerCase().startsWith("arthur");
 
   const colorClass = isEven

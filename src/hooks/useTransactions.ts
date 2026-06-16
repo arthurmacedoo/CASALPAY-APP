@@ -17,12 +17,10 @@ import type { Transaction, TransactionFormData, ExpenseFormData, SettlementFormD
 import {
   transactionsRef,
   transactionDocRef,
-  COUPLE_ID,
   db,
 } from "../lib/firebase";
 import { getMonthKey } from "../lib/calculations";
 import { useGroupContext } from "../contexts/GroupContext";
-import { getLegacyRoleForMember } from "../lib/transactionVisibility";
 
 interface UseTransactionsReturn {
   transactions: Transaction[];
@@ -38,35 +36,23 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { members, group, currentMember } = useGroupContext();
-  const ownerMember = members.find((m) => getLegacyRoleForMember(m) === "owner");
-  const partnerMember = members.find((m) => getLegacyRoleForMember(m) === "partner");
+  const { group, currentMember } = useGroupContext();
 
   useEffect(() => {
     setLoading(true);
     setError(null);
 
     // Query Bailing: Proteção estrita multi-grupos.
-    // Se o usuário não for um membro válido do grupo carregado, 
-    // aborta a query imediatamente e previne vazamentos ou erros de permission-denied.
-    if (!currentMember) {
+    if (!currentMember || !group) {
       setTransactions([]);
       setLoading(false);
       return;
     }
 
-    // Barreira: grupos 'standard' (não-legados) ainda não têm transações no path de couples.
-    // Retorna vazio imediatamente para não gerar erros de permissão.
-    if (group && group.type === 'standard') {
-      setTransactions([]);
-      setLoading(false);
-      return;
-    }
+    const activeGroupId = group.id;
 
-    // Agora buscamos direto de /couples/{coupleId}/transactions
-    // E só precisamos filtrar por monthKey e ordenar.
     const q = query(
-      transactionsRef(),
+      transactionsRef(activeGroupId),
       where("monthKey", "==", monthKey),
       orderBy("date", "desc"),
       orderBy("createdAt", "desc")
@@ -76,34 +62,23 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
       q,
       (snapshot) => {
         const docs: Transaction[] = snapshot.docs.map((docSnap) => {
-          const data = docSnap.data() as any;
-          // Tarefa 4.2: Mapeador de Retrocompatibilidade
-          if (data.paidBy === "Arthur") data.paidBy = "owner";
-          if (data.paidBy === "Zara") data.paidBy = "partner";
-          if (data.from === "Arthur") data.from = "owner";
-          if (data.from === "Zara") data.from = "partner";
-          if (data.to === "Arthur") data.to = "owner";
-          if (data.to === "Zara") data.to = "partner";
-          if (data.splitType === "100% Arthur") data.splitType = "100% owner";
-          if (data.splitType === "100% Zara") data.splitType = "100% partner";
-          
           return {
             id: docSnap.id,
-            ...data,
+            ...docSnap.data(),
           } as Transaction;
-        // Exclui pendentes das views shared/zara (geridas por usePendingTransactions)
         }).filter((t) => !t.status || t.status === "confirmed");
+        
         setTransactions(docs);
         setLoading(false);
       },
       (err: any) => {
         console.error("Erro ao carregar transações:", err);
         if (err.code === "permission-denied") {
-          setError(`Usuário autenticado, mas sem permissão no Firestore. (Talvez o doc couples/${COUPLE_ID} não exista ou UID não esteja em members)`);
+          localStorage.removeItem('casalpay_active_group');
+          setError(`Usuário autenticado, mas sem permissão no Firestore para o grupo ${activeGroupId}.`);
         } else if (err.code === "unavailable") {
           setError("Firestore indisponível ou sem conexão.");
         } else if (err.code === "failed-precondition" && err.message?.includes("index")) {
-          // Oculta a URL feia do Firebase e mostra uma mensagem amigável
           console.warn("Index URL:", err.message);
           setError("O banco de dados precisa finalizar a criação de um índice. Tente novamente em alguns minutos.");
         } else {
@@ -118,9 +93,12 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
 
   const addTransaction = useCallback(
     async (data: TransactionFormData, amountCents: number) => {
+      if (!group) throw new Error("Grupo não carregado.");
+      const activeGroupId = group.id;
+
       const baseData = {
         description: data.description.trim(),
-        coupleId: COUPLE_ID, // Pode manter no doc, mas a regra usa o path
+        coupleId: activeGroupId, 
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -129,7 +107,7 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
         const count = data.installmentCount;
         const baseAmount = Math.floor(amountCents / count);
         const remainder = amountCents % count;
-        const groupId = doc(collection(db, "couples")).id;
+        const installmentGroupId = doc(collection(db, "groups")).id;
 
         const [year, month, day] = data.date.split("-").map(Number);
         
@@ -148,19 +126,13 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
           const newDayStr = String(newDay).padStart(2, "0");
           const newDateStr = `${newYear}-${newMonthStr}-${newDayStr}`;
 
-          // Tarefa 2: Visibilidade e Dono da fatura (Etapa 2.1)
-          // Prioridade: UI fornece personalOwnerUserId -> usa direto.
-          // Fallback: infere por splitType + membro legado.
           const isPersonalOwner = data.splitType === "100% owner";
           const isPersonalPartner = data.splitType === "100% partner";
           const visibility = (isPersonalOwner || isPersonalPartner) ? "personal" : "shared";
-          const personalOwnerUserId =
-            (data as ExpenseFormData).personalOwnerUserId ?? // UI-supplied
-            (isPersonalOwner ? ownerMember?.userId : undefined) ??
-            (isPersonalPartner ? partnerMember?.userId : undefined);
+          const personalOwnerUserId = (data as ExpenseFormData).personalOwnerUserId;
 
           if (visibility === "personal" && !personalOwnerUserId) {
-            throw new Error("Membros do grupo ainda não carregados. Tente novamente.");
+            throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
           }
 
           const docData = {
@@ -173,31 +145,26 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
             splitType: data.splitType,
             installmentCount: count,
             currentInstallment: i,
-            groupId: groupId,
+            groupId: installmentGroupId,
             originalAmount: amountCents,
             visibility: visibility,
-            personalOwnerUserId: personalOwnerUserId,
+            personalOwnerUserId: personalOwnerUserId || null,
           };
 
-          const newDocRef = doc(transactionsRef());
+          const newDocRef = doc(transactionsRef(activeGroupId));
           batch.set(newDocRef, docData);
         }
         await batch.commit();
       } else {
         let docData;
         if (data.type === "expense") {
-          // Prioridade: UI fornece personalOwnerUserId -> usa direto.
-          // Fallback: infere por splitType + membro legado.
           const isPersonalOwner = data.splitType === "100% owner";
           const isPersonalPartner = data.splitType === "100% partner";
           const visibility = (isPersonalOwner || isPersonalPartner) ? "personal" : "shared";
-          const personalOwnerUserId =
-            (data as ExpenseFormData).personalOwnerUserId ?? // UI-supplied
-            (isPersonalOwner ? ownerMember?.userId : undefined) ??
-            (isPersonalPartner ? partnerMember?.userId : undefined);
+          const personalOwnerUserId = (data as ExpenseFormData).personalOwnerUserId;
 
           if (visibility === "personal" && !personalOwnerUserId) {
-            throw new Error("Membros do grupo ainda não carregados. Tente novamente.");
+            throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
           }
 
           docData = {
@@ -209,17 +176,14 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
             paidBy: data.paidBy,
             splitType: data.splitType,
             visibility: visibility,
-            personalOwnerUserId: personalOwnerUserId,
+            personalOwnerUserId: personalOwnerUserId || null,
           };
         } else {
           const visibility = data.pixDestination === "zara_card" ? "personal" : "shared";
-          // Prioridade: UI fornece personalOwnerUserId -> usa direto.
-          const personalOwnerUserId =
-            (data as SettlementFormData).personalOwnerUserId ??
-            (data.pixDestination === "zara_card" ? partnerMember?.userId : undefined);
+          const personalOwnerUserId = (data as SettlementFormData).personalOwnerUserId;
 
           if (visibility === "personal" && !personalOwnerUserId) {
-            throw new Error("Membros do grupo ainda não carregados. Tente novamente.");
+            throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
           }
 
           docData = {
@@ -232,36 +196,37 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
             to: data.to,
             pixDestination: data.pixDestination || "shared",
             visibility: visibility,
-            personalOwnerUserId: personalOwnerUserId,
+            personalOwnerUserId: personalOwnerUserId || null,
           };
         }
 
-        await addDoc(transactionsRef(), docData);
+        await addDoc(transactionsRef(activeGroupId), docData);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ownerMember?.userId, partnerMember?.userId, members]
+    [group]
   );
 
   const updateTransaction = useCallback(
     async (originalTransaction: Transaction, data: TransactionFormData, amountCents: number) => {
+      if (!group) throw new Error("Grupo não carregado.");
+      const activeGroupId = group.id;
+
       const wasInstallment = originalTransaction.type === "expense" && Boolean(originalTransaction.groupId);
       const willBeInstallment = data.type === "expense" && Boolean(data.isInstallment) && (data.installmentCount ?? 0) > 1;
 
-      // ─── Cenário A: qualquer mudança envolvendo parcelas ─────────────────────
       if (wasInstallment || willBeInstallment) {
         const batch = writeBatch(db);
 
         // 1. Apagar parcelas antigas
         const expenseOrig = originalTransaction.type === "expense" ? originalTransaction : null;
-        if (expenseOrig?.groupId) {
+        // PROTEÇÃO CRÍTICA: Se o groupId for igual ao activeGroupId (erro de migração antiga), NUNCA apagar o grupo inteiro.
+        if (expenseOrig?.groupId && expenseOrig.groupId !== activeGroupId) {
           const oldGroupSnap = await getDocs(
-            query(transactionsRef(), where("groupId", "==", expenseOrig.groupId))
+            query(transactionsRef(activeGroupId), where("groupId", "==", expenseOrig.groupId))
           );
           oldGroupSnap.forEach((docSnap) => batch.delete(docSnap.ref));
         } else {
-          // Era compra única (ex: pending sem groupId) — apaga só o doc original
-          batch.delete(transactionDocRef(originalTransaction.id));
+          batch.delete(transactionDocRef(activeGroupId, originalTransaction.id));
         }
 
         // 2. Criar as N novas parcelas no mesmo batch
@@ -269,7 +234,7 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
           const count = data.installmentCount!;
           const baseAmount = Math.floor(amountCents / count);
           const remainder = amountCents % count;
-          const newGroupId = doc(collection(db, "couples")).id;
+          const installmentGroupId = doc(collection(db, "groups")).id;
           const [year, month, day] = data.date.split("-").map(Number);
 
           for (let i = 1; i <= count; i++) {
@@ -280,21 +245,19 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
             const lastDayOfTargetMonth = new Date(newYear, newMonthIndex + 1, 0).getDate();
             const newDay = Math.min(day, lastDayOfTargetMonth);
             const newDateStr = `${newYear}-${String(newMonthIndex + 1).padStart(2, "0")}-${String(newDay).padStart(2, "0")}`;
+            
             const isPersonalOwner = data.splitType === "100% owner";
             const isPersonalPartner = data.splitType === "100% partner";
             const visibility = (isPersonalOwner || isPersonalPartner) ? "personal" : "shared";
-            const personalOwnerUserId =
-              (data as ExpenseFormData).personalOwnerUserId ??
-              (isPersonalOwner ? ownerMember?.userId : undefined) ??
-              (isPersonalPartner ? partnerMember?.userId : undefined);
+            const personalOwnerUserId = (data as ExpenseFormData).personalOwnerUserId;
 
             if (visibility === "personal" && !personalOwnerUserId) {
-              throw new Error("Membros do grupo ainda não carregados. Tente novamente.");
+              throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
             }
 
-            batch.set(doc(transactionsRef()), {
+            batch.set(doc(transactionsRef(activeGroupId)), {
               description: data.description.trim(),
-              coupleId: COUPLE_ID,
+              coupleId: activeGroupId,
               amount: installmentAmount,
               date: newDateStr,
               monthKey: getMonthKey(newDateStr),
@@ -303,42 +266,40 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
               splitType: data.splitType,
               installmentCount: count,
               currentInstallment: i,
-              groupId: newGroupId,
+              groupId: installmentGroupId,
               originalAmount: amountCents,
               visibility,
-              personalOwnerUserId,
+              personalOwnerUserId: personalOwnerUserId || null,
               status: "confirmed",
               createdAt: serverTimestamp(),
               updatedAt: serverTimestamp(),
             });
           }
         } else {
-          // Passou de parcelado para compra única: cria um novo doc simples
           let visibility: "shared" | "personal" = "shared";
-          let personalOwnerUserId: string | undefined = undefined;
+          let personalOwnerUserId: string | null = null;
 
           if (data.type === "expense") {
             const isPersonalOwner = data.splitType === "100% owner";
             const isPersonalPartner = data.splitType === "100% partner";
             visibility = (isPersonalOwner || isPersonalPartner) ? "personal" : "shared";
-            personalOwnerUserId =
-              (data as ExpenseFormData).personalOwnerUserId ??
-              (isPersonalOwner ? ownerMember?.userId : undefined) ??
-              (isPersonalPartner ? partnerMember?.userId : undefined);
+            personalOwnerUserId = (data as ExpenseFormData).personalOwnerUserId || null;
+
+            if (visibility === "personal" && !personalOwnerUserId) {
+              throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
+            }
           } else {
             visibility = data.pixDestination === "zara_card" ? "personal" : "shared";
-            personalOwnerUserId =
-              (data as SettlementFormData).personalOwnerUserId ??
-              (data.pixDestination === "zara_card" ? partnerMember?.userId : undefined);
+            personalOwnerUserId = (data as SettlementFormData).personalOwnerUserId || null;
+
+            if (visibility === "personal" && !personalOwnerUserId) {
+              throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
+            }
           }
 
-          if (visibility === "personal" && !personalOwnerUserId) {
-            throw new Error("Membros do grupo ainda não carregados. Tente novamente.");
-          }
-
-          batch.set(doc(transactionsRef()), {
+          batch.set(doc(transactionsRef(activeGroupId)), {
             description: data.description.trim(),
-            coupleId: COUPLE_ID,
+            coupleId: activeGroupId,
             amount: amountCents,
             date: data.date,
             monthKey: getMonthKey(data.date),
@@ -374,39 +335,36 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
         const isPersonalOwner = data.splitType === "100% owner";
         const isPersonalPartner = data.splitType === "100% partner";
         const visibility = (isPersonalOwner || isPersonalPartner) ? "personal" : "shared";
-        const personalOwnerUserId =
-          (data as ExpenseFormData).personalOwnerUserId ??
-          (isPersonalOwner ? ownerMember?.userId : undefined) ??
-          (isPersonalPartner ? partnerMember?.userId : undefined);
+        const personalOwnerUserId = (data as ExpenseFormData).personalOwnerUserId || null;
         
         if (visibility === "personal" && !personalOwnerUserId) {
-          throw new Error("Membros do grupo ainda não carregados. Tente novamente.");
+           throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
         }
         
         docData = { ...baseData, type: "expense" as const, paidBy: data.paidBy, splitType: data.splitType, visibility, personalOwnerUserId };
       } else {
         const visibility = data.pixDestination === "zara_card" ? "personal" : "shared";
-        const personalOwnerUserId =
-          (data as SettlementFormData).personalOwnerUserId ??
-          (data.pixDestination === "zara_card" ? partnerMember?.userId : undefined);
+        const personalOwnerUserId = (data as SettlementFormData).personalOwnerUserId || null;
         
         if (visibility === "personal" && !personalOwnerUserId) {
-          throw new Error("Membros do grupo ainda não carregados. Tente novamente.");
+           throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
         }
         
         docData = { ...baseData, type: "settlement" as const, from: data.from, to: data.to, pixDestination: data.pixDestination || "shared", visibility, personalOwnerUserId };
       }
 
-      await updateDoc(transactionDocRef(originalTransaction.id), docData);
+      await updateDoc(transactionDocRef(activeGroupId, originalTransaction.id), docData);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ownerMember?.userId, partnerMember?.userId, members]
+    [group]
   );
 
   const deleteTransaction = useCallback(async (transaction: Transaction) => {
-    if (transaction.type === "expense" && transaction.groupId) {
+    if (!group) throw new Error("Grupo não carregado.");
+    const activeGroupId = group.id;
+
+    if (transaction.type === "expense" && transaction.groupId && transaction.groupId !== activeGroupId) {
       const q = query(
-        transactionsRef(),
+        transactionsRef(activeGroupId),
         where("groupId", "==", transaction.groupId)
       );
       const querySnapshot = await getDocs(q);
@@ -418,9 +376,9 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
       
       await batch.commit();
     } else {
-      await deleteDoc(transactionDocRef(transaction.id));
+      await deleteDoc(transactionDocRef(activeGroupId, transaction.id));
     }
-  }, []);
+  }, [group]);
 
   return {
     transactions,

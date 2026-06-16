@@ -10,10 +10,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useGroupContext } from "../contexts/GroupContext";
-import { useAuth } from "../hooks/useAuth";
+import { useAuthContext } from "../contexts/AuthContext";
 import { useUserGroups } from "../hooks/useUserGroups";
 import { OWNER_NAME, PARTNER_NAME } from "../constants/couple";
 import { COUPLE_ID } from "../lib/firebase";
+import toast from "react-hot-toast";
+import type { GroupMember } from "../types";
 
 interface GroupSwitcherSheetProps {
   isOpen: boolean;
@@ -31,8 +33,8 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { group, members, loading: activeLoading, switchGroup, createGroup, joinGroup, currentMember } = useGroupContext();
-  const { user } = useAuth();
+  const { group, members, loading: activeLoading, switchGroup, createGroup, joinGroup, currentMember, removeMember } = useGroupContext();
+  const { user } = useAuthContext();
   const { groups: userGroups, loading: groupsLoading } = useUserGroups(user);
   const sheetRef = useRef<HTMLDivElement>(null);
 
@@ -43,6 +45,23 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
   const [createError, setCreateError] = useState("");
+  
+  const [memberToRemove, setMemberToRemove] = useState<GroupMember | null>(null);
+  const [removingMember, setRemovingMember] = useState(false);
+
+  const handleRemoveMember = async () => {
+    if (!memberToRemove) return;
+    setRemovingMember(true);
+    try {
+      await removeMember(memberToRemove.userId);
+      toast.success("Membro removido com sucesso");
+      setMemberToRemove(null);
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao remover membro");
+    } finally {
+      setRemovingMember(false);
+    }
+  };
 
   const handleCreateGroup = async () => {
     const name = newGroupName.trim();
@@ -51,15 +70,16 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
     setCreateError('');
     try {
       await createGroup(name);
+      toast.success('Grupo criado com sucesso!');
       setShowCreateForm(false);
       setShowJoinForm(false);
       setNewGroupName("");
       setInviteCode("");
       setCreateError("");
       onClose();
-    } catch (e) {
-      console.error("[CasalPay CRÍTICO] Falha ao criar grupo no Firestore:", e);
-      setCreateError('Erro ao criar grupo. Tente novamente.');
+    } catch (e: any) {
+      setCreateError(e.message || 'Erro ao criar grupo. Tente novamente.');
+      toast.error('Erro ao criar grupo.');
     } finally {
       setCreating(false);
     }
@@ -222,9 +242,22 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
                         )}
                       </p>
                       <p className="text-xs text-text-muted capitalize">
-                        {m.userId === group?.createdBy ? "Admin 👑" : "Membro"}
+                        {m.role === 'admin' ? "Admin 👑" : "Membro"}
                       </p>
                     </div>
+                    
+                    {/* Botão de Engrenagem (Opções do Admin) */}
+                    {currentMember?.role === 'admin' && !isMe && (
+                      <button
+                        onClick={() => setMemberToRemove(m)}
+                        className="p-2 -mr-2 text-text-muted hover:text-text-primary transition-colors shrink-0"
+                        title="Opções do membro"
+                      >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -291,11 +324,13 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
                     setJoining(true);
                     try {
                       await joinGroup(inviteCode);
+                      toast.success('Você entrou no grupo com sucesso!');
                       setShowJoinForm(false);
                       setInviteCode('');
                       onClose();
                     } catch (err: any) {
                       setCreateError(err.message || 'Erro ao entrar no grupo.');
+                      toast.error('Código de convite inválido ou erro de conexão.');
                     } finally {
                       setJoining(false);
                     }
@@ -311,6 +346,39 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
           )}
         </div>
       </div>
+      
+      {/* Modal de Remover Membro */}
+      {memberToRemove && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setMemberToRemove(null)}>
+          <div className="bg-bg-card border border-border rounded-3xl p-6 w-full max-w-[320px] shadow-2xl animate-scale-up flex flex-col items-center text-center" onClick={e => e.stopPropagation()}>
+            <div className="w-14 h-14 rounded-full bg-accent-red/10 flex items-center justify-center mb-4 text-accent-red">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold text-text-primary mb-2">Remover membro?</h3>
+            <p className="text-sm text-text-secondary mb-6">
+              Tem certeza que deseja remover <strong>{memberToRemove.name}</strong> do grupo? Esta ação não pode ser desfeita.
+            </p>
+            <div className="flex gap-3 w-full">
+              <button 
+                onClick={() => setMemberToRemove(null)}
+                className="flex-1 py-3 rounded-xl bg-bg-elevated text-text-primary font-semibold hover:bg-white/5 transition-colors"
+                disabled={removingMember}
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleRemoveMember}
+                disabled={removingMember}
+                className="flex-1 py-3 rounded-xl bg-accent-red text-white font-semibold shadow-[0_0_20px_rgba(248,113,113,0.15)] hover:bg-accent-red/90 transition-colors disabled:opacity-50"
+              >
+                {removingMember ? "Removendo..." : "Sim, remover"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>,
     document.body
   );

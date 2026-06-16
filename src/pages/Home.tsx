@@ -2,8 +2,9 @@ import React, { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useTransactions } from "../hooks/useTransactions";
-import { deleteDoc } from "firebase/firestore";
-import { transactionDocRef, COUPLE_ID } from "../lib/firebase";
+import { deleteDoc, setDoc } from "firebase/firestore";
+import { transactionDocRef, COUPLE_ID, userDocRef } from "../lib/firebase";
+import { useAuthContext } from "../contexts/AuthContext";
 import { usePendingTransactions } from "../hooks/usePendingTransactions";
 import { calculateBalance, generatePixSummary } from "../lib/calculations";
 import { getCurrentMonthKey, formatMonthLabel, formatBRL, formatDateBR } from "../lib/formatters";
@@ -110,8 +111,9 @@ const PendingTransactionCard: React.FC<{
 // ── Página principal ──────────────────────────────────────────────────────────
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
+  const { user, logout } = useAuthContext();
+  const { group, currentMember } = useGroupContext();
   const currentMonth = getCurrentMonthKey();
-  const { group, members, currentMember } = useGroupContext();
 
   const { transactions, loading, error } = useTransactions(currentMonth);
   const { pendingTransactions, pendingCount, loading: pendingLoading } = usePendingTransactions();
@@ -139,13 +141,13 @@ export const HomePage: React.FC = () => {
 
   // ── Filtragem das abas compartilhada e fatura ────────────────────────────────
   const sharedTransactions = useMemo(
-    () => transactions.filter(t => isSharedTransaction(t, members)),
-    [transactions, members]
+    () => transactions.filter(t => isSharedTransaction(t)),
+    [transactions]
   );
 
   const myTransactions = useMemo(
-    () => transactions.filter((t) => isInvoiceTransactionForMember(t, currentMember, members)),
-    [transactions, currentMember, members]
+    () => transactions.filter((t) => isInvoiceTransactionForMember(t, currentMember)),
+    [transactions, currentMember]
   );
 
   // ── Cálculos ─────────────────────────────────────────────────────────────────
@@ -155,8 +157,8 @@ export const HomePage: React.FC = () => {
   );
 
   const myInvoiceTotal = useMemo(
-    () => calculatePersonalInvoiceTotal(myTransactions, currentMember, members),
-    [myTransactions, currentMember, members]
+    () => calculatePersonalInvoiceTotal(myTransactions, currentMember),
+    [myTransactions, currentMember]
   );
 
   // ── Lista ativa por aba ───────────────────────────────────────────────────────
@@ -195,8 +197,9 @@ export const HomePage: React.FC = () => {
   };
 
   const handleDeletePending = async (t: Transaction) => {
+    if (!group) return;
     try {
-      await deleteDoc(transactionDocRef(t.id));
+      await deleteDoc(transactionDocRef(group.id, t.id));
     } catch (err) {
       console.error("Erro ao excluir despesa pendente", err);
     }
@@ -204,12 +207,60 @@ export const HomePage: React.FC = () => {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center flex-1 px-5 gap-4">
-        <span className="text-4xl">😕</span>
-        <p className="text-text-secondary text-center">{error}</p>
-        <Button onClick={() => window.location.reload()} size="sm" variant="secondary">
-          Tentar novamente
-        </Button>
+      <div className="fixed inset-0 z-[100] bg-bg flex flex-col items-center px-6 py-10 overflow-y-auto">
+        {/* Header do Perfil */}
+        <header className="w-full flex items-center justify-between border-b border-border pb-4 mb-10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-accent-blue/20 flex items-center justify-center text-accent-blue font-bold text-lg uppercase">
+              {user?.email?.[0] ?? "U"}
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-text-primary">Sua Conta</span>
+              <span className="text-xs text-text-muted truncate max-w-[150px]">{user?.email}</span>
+            </div>
+          </div>
+          <button 
+            onClick={() => logout()}
+            className="text-xs font-semibold text-accent-red px-3 py-1.5 rounded-lg bg-accent-red/10 hover:bg-accent-red/20 active:bg-accent-red/30 transition-colors"
+          >
+            Sair
+          </button>
+        </header>
+
+        <div className="flex flex-col items-center justify-center flex-1 w-full max-w-sm mt-8">
+          <div className="w-20 h-20 rounded-full bg-accent-red/10 flex items-center justify-center mb-6">
+            <span className="text-4xl">🔒</span>
+          </div>
+          <h2 className="text-2xl font-bold text-text-primary text-center mb-2">
+            Acesso Negado
+          </h2>
+          <p className="text-text-secondary text-center text-sm mb-8">
+            Sua sessão neste grupo expirou ou você não tem mais acesso.
+          </p>
+
+          <div className="flex flex-col gap-3 w-full">
+            <button 
+              onClick={() => setIsGroupSheetOpen(true)}
+              className="w-full py-3.5 bg-accent-blue text-white font-semibold rounded-xl shadow-[0_0_20px_rgba(59,130,246,0.2)] hover:bg-accent-blue/90 transition-all active:scale-[0.98]"
+            >
+              Trocar de Grupo
+            </button>
+            
+            <button 
+              onClick={async () => {
+                localStorage.removeItem('casalpay_active_group');
+                if (user) {
+                   await setDoc(userDocRef(user.uid), { activeGroupId: null }, { merge: true });
+                }
+                window.location.reload();
+              }}
+              className="w-full py-3.5 bg-bg-card border border-border text-text-primary font-semibold rounded-xl hover:bg-bg-elevated transition-all active:scale-[0.98]"
+            >
+              Voltar ao Início
+            </button>
+          </div>
+        </div>
+        <GroupSwitcherSheet isOpen={isGroupSheetOpen} onClose={() => setIsGroupSheetOpen(false)} />
       </div>
     );
   }
@@ -420,9 +471,7 @@ export const HomePage: React.FC = () => {
             <div className="bg-bg-card border border-border rounded-3xl flex flex-col items-center py-12 gap-3 text-center px-6">
               <span className="text-4xl">{viewMode === "shared" ? "🛍️" : "💳"}</span>
               <p className="text-text-primary font-semibold">
-                {group?.type === 'standard'
-                  ? 'Nenhuma transação financeira registrada neste grupo ainda.'
-                  : viewMode === "shared"
+                {viewMode === "shared"
                   ? "Nenhuma despesa ainda"
                   : "Nenhuma despesa pessoal lançada"}
               </p>

@@ -1,5 +1,5 @@
 import React, { useState, Component } from "react";
-import { useAuth } from "../hooks/useAuth";
+import { useAuthContext } from "../contexts/AuthContext";
 import { useNotificationContext } from "../contexts/NotificationContext";
 import {
   OWNER_NAME,
@@ -76,7 +76,7 @@ class FcmErrorBoundary extends Component<
 
 // ─── Componente principal ──────────────────────────────────────────────────
 export const MessagesPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const { permission, requestPermission, pushStatus, pushError } = useNotificationContext();
   
   const [sending, setSending] = useState<string | null>(null);

@@ -3,7 +3,7 @@ import type { Transaction, ExpenseTransaction, SettlementTransaction } from "../
 import { createPortal } from "react-dom";
 import { formatBRL, formatDateBR, formatSplitType } from "../lib/formatters";
 import { calculateExpenseDebt, calculateSettlementEffect } from "../lib/calculations";
-import { OWNER_NAME, PARTNER_NAME, OWNER_EMOJI, PARTNER_EMOJI } from "../constants/couple";
+import { useGroupContext } from "../contexts/GroupContext";
 
 interface TransactionItemProps {
   transaction: Transaction;
@@ -29,15 +29,33 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
     setIsModalOpen(false);
   };
 
+  const { members } = useGroupContext();
   const isExpense = transaction.type === "expense";
+
+  let avatarInitial = "💸";
+  if (isExpense) {
+    if (transaction.visibility === "personal" && transaction.personalOwnerUserId) {
+      const owner = members.find(m => m.userId === transaction.personalOwnerUserId);
+      avatarInitial = owner?.name.charAt(0).toUpperCase() || "👤";
+    } else {
+      const payerIndex = transaction.paidBy === "partner" ? 1 : 0;
+      const payer = members[payerIndex] || members[0];
+      if (payer) {
+        avatarInitial = payer.name.charAt(0).toUpperCase();
+      } else {
+        // Fallback legado visual
+        avatarInitial = transaction.paidBy === "owner" ? "A" : "Z";
+      }
+    }
+  }
 
   return (
     <div className={`card animate-fade-in-up ${!isExpense ? 'bg-violet-900/10 border-violet-800/30' : ''}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="text-lg">
-              {isExpense ? (transaction.paidBy === "owner" ? OWNER_EMOJI : PARTNER_EMOJI) : "💸"}
+            <span className="w-6 h-6 rounded-full bg-bg-elevated flex items-center justify-center text-xs font-bold border border-border shrink-0">
+              {avatarInitial}
             </span>
             <p className="text-base font-semibold text-text-primary truncate">
               {transaction.description || (isExpense ? "Compra" : "Pix de Acerto")}
@@ -51,14 +69,18 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
           
           <p className="text-xs text-text-muted mb-2">
             {formatDateBR(transaction.date)}
-            {isExpense && ` · ${formatSplitType(transaction.splitType)}`}
+            {isExpense && ` · ${
+              transaction.visibility === "personal" && transaction.personalOwnerUserId
+                ? `Só de ${members.find(m => m.userId === transaction.personalOwnerUserId)?.name?.split(' ')[0] || "Membro"}`
+                : formatSplitType(transaction.splitType)
+            }`}
           </p>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap mt-1">
             {isExpense ? (
-              <ExpenseDetails transaction={transaction as ExpenseTransaction} />
+              <ExpenseDetails transaction={transaction as ExpenseTransaction} members={members} />
             ) : (
-              <SettlementDetails transaction={transaction as SettlementTransaction} />
+              <SettlementDetails transaction={transaction as SettlementTransaction} members={members} />
             )}
           </div>
         </div>
@@ -120,24 +142,25 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
 
 // ─── Sub-componentes para exibir os detalhes ──────────────────────────────────
 
-const ExpenseDetails: React.FC<{ transaction: ExpenseTransaction }> = ({ transaction }) => {
+const ExpenseDetails: React.FC<{ transaction: ExpenseTransaction, members: any[] }> = ({ transaction, members }) => {
   const debt = calculateExpenseDebt(transaction);
   const isNobodyOwes = debt === 0;
-  const zaraOwes = debt > 0;
+
+  const payerIndex = transaction.paidBy === "partner" ? 1 : 0;
+  const payer = members[payerIndex] || members[0];
+  const payerName = payer ? payer.name.split(' ')[0] : "Membro";
 
   const paidByColor = transaction.paidBy === "owner" ? "text-accent-blue" : "text-accent-pink";
-  const debtColor = isNobodyOwes ? "text-text-muted" : zaraOwes ? "text-accent-pink" : "text-accent-blue";
+  const debtColor = isNobodyOwes ? "text-text-muted" : "text-accent-pink";
   
   const debtText = isNobodyOwes
     ? "Sem dívida"
-    : zaraOwes
-    ? `${PARTNER_NAME} deve ${formatBRL(debt)}`
-    : `${OWNER_NAME} deve ${formatBRL(Math.abs(debt))}`;
+    : `Dívida de ${formatBRL(Math.abs(debt))}`;
 
   return (
     <>
       <span className={`text-xs font-medium ${paidByColor}`}>
-        Pagou: {transaction.paidBy === "owner" ? OWNER_NAME : PARTNER_NAME}
+        Pagou: {payerName}
       </span>
       <span className="text-text-muted text-xs">·</span>
       <span className={`text-xs font-medium ${debtColor}`}>
@@ -147,20 +170,22 @@ const ExpenseDetails: React.FC<{ transaction: ExpenseTransaction }> = ({ transac
   );
 };
 
-const SettlementDetails: React.FC<{ transaction: SettlementTransaction }> = ({ transaction }) => {
+const SettlementDetails: React.FC<{ transaction: SettlementTransaction, members: any[] }> = ({ transaction, members }) => {
   const effect = calculateSettlementEffect(transaction);
-  // effect positivo = reduz dívida da Zara
-  // effect negativo = reduz dívida do Arthur
   
+  const senderIndex = transaction.from === "partner" ? 1 : 0;
+  const sender = members[senderIndex] || members[0];
+  const senderName = sender ? sender.name.split(' ')[0] : "Membro";
+
   const fromColor = transaction.from === "owner" ? "text-accent-blue" : "text-accent-pink";
   const effectText = effect > 0 
-    ? `Reduziu dívida dela` 
-    : `Reduziu dívida dele`;
+    ? `Reduziu dívida` 
+    : `Reduziu dívida`;
 
   return (
     <>
       <span className={`text-xs font-medium ${fromColor}`}>
-        Enviou: {transaction.from === "owner" ? OWNER_NAME : PARTNER_NAME}
+        Enviou: {senderName}
       </span>
       <span className="text-text-muted text-xs">·</span>
       <span className="text-xs font-medium text-violet-400">

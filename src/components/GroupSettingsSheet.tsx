@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useGroupContext } from "../contexts/GroupContext";
-import { useAuth } from "../hooks/useAuth";
+import { useAuthContext } from "../contexts/AuthContext";
 
 interface GroupSettingsSheetProps {
   isOpen: boolean;
@@ -10,7 +10,7 @@ interface GroupSettingsSheetProps {
 
 export const GroupSettingsSheet: React.FC<GroupSettingsSheetProps> = ({ isOpen, onClose }) => {
   const { group, isCurrentUserAdmin, updateGroup, deleteGroup } = useGroupContext();
-  const { logout } = useAuth();
+  const { logout } = useAuthContext();
   
   const [name, setName] = useState(group?.name ?? "");
   const [saving, setSaving] = useState(false);
@@ -28,7 +28,7 @@ export const GroupSettingsSheet: React.FC<GroupSettingsSheetProps> = ({ isOpen, 
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
-  const isCustomGroup = group?.type === 'standard' && isCurrentUserAdmin;
+  const isCustomGroup = isCurrentUserAdmin;
 
   const handleSave = async () => {
     if (!name.trim() || name === group?.name) { onClose(); return; }

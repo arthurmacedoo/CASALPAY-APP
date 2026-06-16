@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-import { useAuth } from "../hooks/useAuth";
+import { useAuthContext } from "../contexts/AuthContext";
 
 export const LoginPage: React.FC = () => {
-  const { login, register, error, loading } = useAuth();
+  const { login, register, error, loading } = useAuthContext();
   const [isRegister, setIsRegister] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");

@@ -10,9 +10,7 @@ import {
 import { TransactionItem } from "../components/TransactionItem";
 import { MonthSelector } from "../components/MonthSelector";
 import type { Transaction } from "../types";
-import { OWNER_NAME, PARTNER_NAME } from "../constants/couple";
-
-import { useAuth } from "../hooks/useAuth";
+import { useAuthContext } from "../contexts/AuthContext";
 import { useGroupContext } from "../contexts/GroupContext";
 import {
   isInvoiceTransactionForMember,
@@ -26,7 +24,7 @@ export const HistoryPage: React.FC = () => {
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"shared" | "personal">("shared");
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const { members, currentMember, isCurrentUserAdmin } = useGroupContext();
 
   const [selectedInvoiceMemberUserId, setSelectedInvoiceMemberUserId] = useState<string>(
@@ -44,8 +42,8 @@ export const HistoryPage: React.FC = () => {
 
   // Passo 3: Arrumar as Abas no Histórico
   const sharedTransactions = useMemo(
-    () => transactions.filter(t => isSharedTransaction(t, members)),
-    [transactions, members]
+    () => transactions.filter(t => isSharedTransaction(t)),
+    [transactions]
   );
 
   const selectedMember = useMemo(() => {
@@ -53,12 +51,12 @@ export const HistoryPage: React.FC = () => {
   }, [members, selectedInvoiceMemberUserId, currentMember]);
 
   const invoiceTransactions = useMemo(() => {
-    return transactions.filter(t => isInvoiceTransactionForMember(t, selectedMember, members));
-  }, [transactions, selectedMember, members]);
+    return transactions.filter(t => isInvoiceTransactionForMember(t, selectedMember));
+  }, [transactions, selectedMember]);
 
   const invoiceTotal = useMemo(
-    () => calculatePersonalInvoiceTotal(invoiceTransactions, selectedMember, members),
-    [invoiceTransactions, selectedMember, members]
+    () => calculatePersonalInvoiceTotal(invoiceTransactions, selectedMember),
+    [invoiceTransactions, selectedMember]
   );
 
   const filteredTransactions = useMemo(() => {
@@ -218,8 +216,8 @@ export const HistoryPage: React.FC = () => {
                 {balance.netBalance === 0 
                 ? "Tudo quitado" 
                 : balance.netBalance > 0 
-                ? `${PARTNER_NAME} deve ${formatBRL(balance.netBalance)}`
-                : `${OWNER_NAME} deve ${formatBRL(Math.abs(balance.netBalance))}`}
+                ? `Alguém deve ${formatBRL(balance.netBalance)}`
+                : `Você deve ${formatBRL(Math.abs(balance.netBalance))}`}
               </p>
             </div>
           )}

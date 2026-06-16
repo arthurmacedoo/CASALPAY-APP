@@ -90,13 +90,13 @@ if (!COUPLE_ID) {
 /** Referência ao documento do casal */
 export const coupleDocRef = () => doc(db, "couples", COUPLE_ID);
 
-/** Coleção de transações do casal */
-export const transactionsRef = () =>
-  collection(db, "couples", COUPLE_ID, "transactions");
+/** Coleção de transações do grupo */
+export const transactionsRef = (groupId: string) =>
+  collection(db, "groups", groupId, "transactions");
 
 /** Referência a uma transação específica */
-export const transactionDocRef = (id: string) =>
-  doc(db, "couples", COUPLE_ID, "transactions", id);
+export const transactionDocRef = (groupId: string, id: string) =>
+  doc(db, "groups", groupId, "transactions", id);
 
 /** Coleção de tokens FCM do casal */
 export const fcmTokensRef = () =>

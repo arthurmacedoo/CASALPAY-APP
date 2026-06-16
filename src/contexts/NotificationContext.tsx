@@ -1,7 +1,7 @@
 import React, { createContext, useContext } from "react";
 import type { ReactNode } from "react";
 import { usePushNotifications, type PushStatus } from "../hooks/usePushNotifications";
-import { useAuth } from "../hooks/useAuth";
+import { useAuthContext } from "./AuthContext";
 
 interface NotificationContextType {
   permission: NotificationPermission;
@@ -13,7 +13,7 @@ interface NotificationContextType {
 const NotificationContext = createContext<NotificationContextType | null>(null);
 
 export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const pushState = usePushNotifications(user);
 
   return (

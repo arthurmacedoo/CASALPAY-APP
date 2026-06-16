@@ -12,12 +12,12 @@
 import React, { createContext, useContext } from "react";
 import type { ReactNode } from "react";
 import { useActiveGroup, type UseActiveGroupReturn } from "../hooks/useActiveGroup";
-import { useAuth } from "../hooks/useAuth";
+import { useAuthContext } from "./AuthContext";
 
 const GroupContext = createContext<UseActiveGroupReturn | null>(null);
 
 export const GroupProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const groupState = useActiveGroup(user);
 
   return (
