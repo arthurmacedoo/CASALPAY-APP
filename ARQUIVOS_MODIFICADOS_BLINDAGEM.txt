@@ -1,0 +1,1743 @@
+
+================================================================================
+FILE: src/App.tsx
+================================================================================
+import React, { useState } from "react";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { useAuth } from "./hooks/useAuth";
+import { BottomNav } from "./components/BottomNav";
+import { HomePage } from "./pages/Home";
+import { AddExpensePage } from "./pages/AddExpense";
+import { HistoryPage } from "./pages/History";
+import { MessagesPage } from "./pages/Messages";
+import { LoginPage } from "./pages/Login";
+import { NotificationProvider } from "./contexts/NotificationContext";
+import { GroupProvider, useGroupContext } from "./contexts/GroupContext";
+import { GroupSwitcherSheet } from "./components/GroupSwitcherSheet";
+import { GroupSettingsSheet } from "./components/GroupSettingsSheet";
+import { Toaster } from "react-hot-toast";
+import { isFirebaseConfigured, firebaseConfigError } from "./lib/firebase";
+
+const LoadingScreen: React.FC = () => (
+  <div className="flex flex-col items-center justify-center min-h-screen gap-6">
+    <div className="text-5xl animate-soft-pulse">💑</div>
+    <div>
+      <p className="text-text-primary font-semibold text-lg text-center">CasalPay</p>
+      <p className="text-text-muted text-sm text-center mt-1">Conectando...</p>
+    </div>
+    <span className="spinner" />
+  </div>
+);
+
+const ErrorScreen: React.FC<{ message: string }> = ({ message }) => (
+  <div className="flex flex-col items-center justify-center min-h-screen gap-4 px-8">
+    <span className="text-4xl">😕</span>
+    <p className="text-text-primary font-semibold text-center">
+      Não foi possível conectar
+    </p>
+    <p className="text-text-muted text-sm text-center">{message}</p>
+    <button
+      onClick={() => window.location.reload()}
+      className="text-accent-pink font-medium text-sm mt-2"
+    >
+      Tentar novamente
+    </button>
+  </div>
+);
+
+// Componente interno de Blindagem de Grupo
+const ProtectedGroupRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentMember, group, loading: groupLoading } = useGroupContext();
+  const [isGroupSheetOpen, setIsGroupSheetOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // Aguarda resolver o contexto do grupo antes de decidir a tela
+  if (groupLoading) {
+    return <LoadingScreen />;
+  }
+
+  // Se logado mas sem membro atual válido (nenhum grupo associado/criado) ou sem grupo carregado
+  if (!currentMember || !group) {
+    return (
+      <div className="flex flex-col min-h-screen min-h-dvh safe-top bg-[#0D0D12] text-[#F0F0F8]">
+        <main className="flex-1 overflow-y-auto flex flex-col items-center justify-center px-6">
+          <div className="w-20 h-20 rounded-full bg-accent-blue/10 flex items-center justify-center mb-6">
+            <span className="text-4xl">👋</span>
+          </div>
+          <h2 className="text-2xl font-bold text-text-primary text-center mb-2">Bem-vindo(a)!</h2>
+          <p className="text-text-secondary text-center mb-8 max-w-[280px]">
+            Você ainda não faz parte de nenhum grupo financeiro. Crie o seu grupo ou entre em um usando o código de convite.
+          </p>
+          <button 
+            onClick={() => setIsGroupSheetOpen(true)}
+            className="px-6 py-3.5 bg-accent-blue text-white font-semibold rounded-xl shadow-glow-blue hover:bg-accent-blue/90 transition-all active:scale-[0.98]"
+          >
+            Configurar Meu Grupo
+          </button>
+
+          <GroupSwitcherSheet
+            isOpen={isGroupSheetOpen}
+            onClose={() => setIsGroupSheetOpen(false)}
+          />
+          <GroupSettingsSheet
+            isOpen={isSettingsOpen}
+            onClose={() => setIsSettingsOpen(false)}
+          />
+        </main>
+      </div>
+    );
+  }
+
+  // Com grupo válido, renderiza as rotas internas e a BottomNav
+  return (
+    <div className="flex flex-col min-h-screen min-h-dvh safe-top bg-bg">
+      {children}
+    </div>
+  );
+};
+
+// Componente interno que só monta quando autenticado — hook pode ser chamado sem violar regras
+const AuthenticatedApp: React.FC = () => {
+  return (
+    <GroupProvider>
+      <NotificationProvider>
+        <Toaster position="top-center" toastOptions={{ duration: 4000, style: { background: '#333', color: '#fff', borderRadius: '12px' } }} />
+        <BrowserRouter>
+          <ProtectedGroupRoute>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/add" element={<AddExpensePage />} />
+              <Route path="/history" element={<HistoryPage />} />
+              <Route path="/messages" element={<MessagesPage />} />
+            </Routes>
+            <BottomNav />
+          </ProtectedGroupRoute>
+        </BrowserRouter>
+      </NotificationProvider>
+    </GroupProvider>
+  );
+};
+
+const MainApp: React.FC = () => {
+  const { user, loading, error, isAuthorized } = useAuth();
+
+  if (loading) return <LoadingScreen />;
+  if (error) return <ErrorScreen message={error} />;
+  if (!user || !isAuthorized) return <LoginPage />;
+
+  return <AuthenticatedApp />;
+};
+
+const App: React.FC = () => {
+  if (!isFirebaseConfigured) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4 px-8 bg-[#0D0D14] text-[#F0F0F8]">
+        <span className="text-5xl animate-soft-pulse">⚠️</span>
+        <p className="text-xl font-bold text-center">Configuração do Firebase Ausente</p>
+        <p className="text-sm text-text-secondary text-center max-w-md">
+          O projeto foi clonado com sucesso, mas você precisa configurar as credenciais do Firebase em um arquivo <code className="bg-[#1E1E2C] px-2 py-1 rounded text-[#E879A0]">.env</code> na raiz do projeto para que o app funcione localmente.
+        </p>
+        <div className="bg-[#16161F] border border-[#2A2A3E] p-4 rounded-2xl w-full max-w-md mt-2">
+          <p className="text-xs font-semibold text-[#F0F0F8] mb-2">Status:</p>
+          <code className="text-xs text-[#F87171] font-mono break-all">{firebaseConfigError}</code>
+        </div>
+      </div>
+    );
+  }
+
+  return <MainApp />;
+};
+
+export default App;
+
+
+================================================================================
+FILE: src/components/GroupSwitcherSheet.tsx
+================================================================================
+/**
+ * GroupSwitcherSheet.tsx
+ *
+ * Bottom Sheet mobile-friendly para trocar o grupo ativo.
+ * Estilo Notion/Slack — abre por baixo com overlay suave.
+ *
+ * Etapa 2: mostra apenas o grupo atual com check.
+ * Etapa 3+: listará outros grupos e oferecerá "Criar grupo" / "Entrar por convite".
+ */
+import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useGroupContext } from "../contexts/GroupContext";
+import { useAuth } from "../hooks/useAuth";
+import { useUserGroups } from "../hooks/useUserGroups";
+import { OWNER_NAME, PARTNER_NAME } from "../constants/couple";
+import { COUPLE_ID } from "../lib/firebase";
+
+interface GroupSwitcherSheetProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+function getMemberEmoji(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.includes(OWNER_NAME.toLowerCase())) return "👨🏻";
+  if (lower.includes(PARTNER_NAME.toLowerCase())) return "👩🏻";
+  return "👤";
+}
+
+export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
+  isOpen,
+  onClose,
+}) => {
+  const { group, members, loading: activeLoading, switchGroup, createGroup, joinGroup, currentMember } = useGroupContext();
+  const { user } = useAuth();
+  const { groups: userGroups, loading: groupsLoading } = useUserGroups(user);
+  const sheetRef = useRef<HTMLDivElement>(null);
+
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showJoinForm, setShowJoinForm] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [joining, setJoining] = useState(false);
+  const [createError, setCreateError] = useState("");
+
+  const handleCreateGroup = async () => {
+    const name = newGroupName.trim();
+    if (!name) { setCreateError('Dê um nome ao grupo'); return; }
+    setCreating(true);
+    setCreateError('');
+    try {
+      await createGroup(name);
+      setShowCreateForm(false);
+      setShowJoinForm(false);
+      setNewGroupName("");
+      setInviteCode("");
+      setCreateError("");
+      onClose();
+    } catch (e) {
+      console.error("[CasalPay CRÍTICO] Falha ao criar grupo no Firestore:", e);
+      setCreateError('Erro ao criar grupo. Tente novamente.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  // Fecha ao clicar fora do sheet
+  const handleOverlayClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
+  // Fecha com Escape
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [isOpen, onClose]);
+
+  // Trava scroll do body enquanto aberto
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex flex-col justify-end"
+      style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
+      onClick={handleOverlayClick}
+    >
+      {/* Sheet */}
+      <div
+        ref={sheetRef}
+        className="
+          bg-bg-card rounded-t-3xl border-t border-border
+          px-5 pt-3 pb-10
+          animate-slide-up
+          max-h-[85vh] overflow-y-auto
+        "
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center mb-5">
+          <div className="w-10 h-1 rounded-full bg-border" />
+        </div>
+
+        {/* Título */}
+        <p className="text-xs font-semibold text-text-muted uppercase tracking-widest mb-3 px-1">
+          Seus grupos
+        </p>
+
+        {/* ── Lista de grupos ────────────────────────────────────────────────────── */}
+        {groupsLoading ? (
+          <div className="flex flex-col gap-2">
+            {[1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-3 px-3 py-3 rounded-2xl">
+                <div className="w-11 h-11 rounded-2xl bg-bg-elevated animate-pulse" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3.5 w-36 bg-bg-elevated rounded animate-pulse" />
+                  <div className="h-2.5 w-20 bg-bg-elevated rounded animate-pulse" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : userGroups.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-6 px-4 text-center border border-dashed border-border rounded-2xl bg-bg-elevated/50">
+            <span className="text-2xl mb-2">📭</span>
+            <p className="text-sm font-semibold text-text-primary mb-1">Nenhum grupo</p>
+            <p className="text-xs text-text-secondary">Você ainda não participa de nenhum grupo financeiro. Crie ou entre em um grupo abaixo para começar.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {userGroups.map((g) => {
+              const isActive = g.id === group?.id;
+              const gName = g.name ?? "Grupo sem nome";
+              const gInitial = gName.charAt(0).toUpperCase();
+
+              return (
+                <button
+                  key={g.id}
+                  onClick={async () => {
+                    if (!isActive) await switchGroup(g.id);
+                    onClose();
+                  }}
+                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-left transition-colors ${
+                    isActive
+                      ? "bg-accent-pink/10 border border-accent-pink/20"
+                      : "bg-transparent hover:bg-bg-elevated border border-transparent"
+                  }`}
+                >
+                  {/* Avatar do grupo */}
+                  <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+                    isActive ? "bg-accent-pink/20 border border-accent-pink/30" : "bg-bg-elevated border border-border"
+                  }`}>
+                    <span className={`text-lg font-bold ${isActive ? "text-accent-pink" : "text-text-muted"}`}>
+                      {gInitial}
+                    </span>
+                  </div>
+
+                  {/* Nome */}
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold truncate ${isActive ? "text-text-primary" : "text-text-secondary"}`}>
+                      {gName}
+                    </p>
+                    <p className="text-xs text-text-muted mt-0.5">
+                      {g.id === COUPLE_ID ? "Grupo principal" : (g.memberIds?.length === 1 ? "1 membro" : `${g.memberIds?.length ?? 0} membros`)}
+                    </p>
+                  </div>
+
+                  {/* Check de ativo */}
+                  {isActive && (
+                    <div className="w-5 h-5 rounded-full bg-accent-pink flex items-center justify-center shrink-0">
+                      <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                        <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Membros do grupo ativo ─────────────────────────────────────────────── */}
+        {!activeLoading && group && currentMember && members.length > 0 && (
+          <div className="mt-4">
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-widest mb-2 px-1">
+              Membros
+            </p>
+            <div className="flex flex-col gap-1">
+              {members.map((m) => {
+                const isMe = m.userId === user?.uid;
+                return (
+                  <div
+                    key={m.userId}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
+                  >
+                    {/* Avatar */}
+                    <div className="w-8 h-8 rounded-full bg-bg-elevated border border-border flex items-center justify-center text-sm shrink-0">
+                      <span>{getMemberEmoji(m.name)}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-text-primary truncate">
+                        {m.name}
+                        {isMe && (
+                          <span className="ml-1.5 text-[10px] font-semibold text-accent-pink/70">
+                            (você)
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-xs text-text-muted capitalize">
+                        {m.userId === group?.createdBy ? "Admin 👑" : "Membro"}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Ações: Criar ou Entrar ──────────────────────────────────────────────────────── */}
+        <div className="mt-5 border-t border-border pt-4 flex flex-col gap-2">
+          {!showCreateForm && !showJoinForm && (
+            <>
+              <button onClick={() => setShowCreateForm(true)} className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-bg-elevated transition-colors">
+                <div className="w-8 h-8 rounded-xl bg-bg-elevated border border-dashed border-accent-blue/50 flex items-center justify-center text-base text-accent-blue">＋</div>
+                <span className="text-sm font-medium text-text-secondary">Criar novo grupo</span>
+              </button>
+              <button onClick={() => setShowJoinForm(true)} className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-bg-elevated transition-colors">
+                <div className="w-8 h-8 rounded-xl bg-bg-elevated border border-dashed border-accent-pink/50 flex items-center justify-center text-base text-accent-pink">🔗</div>
+                <span className="text-sm font-medium text-text-secondary">Entrar com código</span>
+              </button>
+            </>
+          )}
+
+          {showCreateForm && (
+            <div className="animate-fade-in-up flex flex-col gap-3 bg-bg-elevated rounded-2xl p-4 border border-border">
+              <p className="text-sm font-semibold text-text-primary">Nome do novo grupo</p>
+              <input
+                autoFocus
+                type="text"
+                placeholder="Ex: Despesas da Faculdade"
+                value={newGroupName}
+                onChange={(e) => { setNewGroupName(e.target.value); setCreateError(''); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateGroup(); if (e.key === 'Escape') { setShowCreateForm(false); setNewGroupName(''); } }}
+                className="w-full bg-bg-card border border-border rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-pink transition-colors"
+              />
+              {createError && <p className="text-xs text-red-400">{createError}</p>}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCreateGroup}
+                  disabled={creating || !newGroupName.trim()}
+                  className="flex-1 py-2.5 rounded-xl bg-accent-blue text-white text-sm font-semibold hover:bg-accent-blue/90 transition-colors disabled:opacity-50"
+                >
+                  {creating ? 'Criando...' : 'Criar grupo'}
+                </button>
+                <button onClick={() => { setShowCreateForm(false); setNewGroupName(''); setCreateError(''); }} className="px-4 py-2.5 rounded-xl bg-bg-card border border-border text-sm text-text-muted hover:text-text-primary transition-colors">Cancelar</button>
+              </div>
+            </div>
+          )}
+
+          {showJoinForm && (
+            <div className="animate-fade-in-up flex flex-col gap-3 bg-bg-elevated rounded-2xl p-4 border border-border">
+              <p className="text-sm font-semibold text-text-primary">Código de convite</p>
+              <input
+                autoFocus
+                type="text"
+                placeholder="Cole o ID do grupo aqui"
+                value={inviteCode}
+                onChange={(e) => { setInviteCode(e.target.value); setCreateError(''); }}
+                className="w-full bg-bg-card border border-border rounded-xl px-4 py-3 text-sm text-text-primary font-mono placeholder:text-text-muted focus:outline-none focus:border-accent-pink transition-colors"
+              />
+              {createError && <p className="text-xs text-red-400">{createError}</p>}
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    setJoining(true);
+                    try {
+                      await joinGroup(inviteCode);
+                      setShowJoinForm(false);
+                      setInviteCode('');
+                      onClose();
+                    } catch (err: any) {
+                      setCreateError(err.message || 'Erro ao entrar no grupo.');
+                    } finally {
+                      setJoining(false);
+                    }
+                  }}
+                  disabled={joining || !inviteCode.trim()}
+                  className="flex-1 py-2.5 rounded-xl bg-accent-pink text-white text-sm font-semibold hover:bg-accent-pink/90 transition-colors disabled:opacity-50"
+                >
+                  {joining ? 'Entrando...' : 'Entrar no grupo'}
+                </button>
+                <button onClick={() => { setShowJoinForm(false); setInviteCode(''); setCreateError(''); }} className="px-4 py-2.5 rounded-xl bg-bg-card border border-border text-sm text-text-muted hover:text-text-primary transition-colors">Cancelar</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+
+================================================================================
+FILE: src/hooks/useTransactions.ts
+================================================================================
+import { useState, useEffect, useCallback } from "react";
+import {
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  serverTimestamp,
+  writeBatch,
+  getDocs,
+  doc,
+  collection,
+} from "firebase/firestore";
+import type { Transaction, TransactionFormData, ExpenseFormData, SettlementFormData } from "../types";
+import {
+  transactionsRef,
+  transactionDocRef,
+  COUPLE_ID,
+  db,
+} from "../lib/firebase";
+import { getMonthKey } from "../lib/calculations";
+import { useGroupContext } from "../contexts/GroupContext";
+import { getLegacyRoleForMember } from "../lib/transactionVisibility";
+
+interface UseTransactionsReturn {
+  transactions: Transaction[];
+  loading: boolean;
+  error: string | null;
+  addTransaction: (data: TransactionFormData, amountCents: number) => Promise<void>;
+  updateTransaction: (originalTransaction: Transaction, data: TransactionFormData, amountCents: number) => Promise<void>;
+  deleteTransaction: (transaction: Transaction) => Promise<void>;
+}
+
+export function useTransactions(monthKey: string): UseTransactionsReturn {
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const { members, group, currentMember } = useGroupContext();
+  const ownerMember = members.find((m) => getLegacyRoleForMember(m) === "owner");
+  const partnerMember = members.find((m) => getLegacyRoleForMember(m) === "partner");
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+
+    // Query Bailing: Proteção estrita multi-grupos.
+    // Se o usuário não for um membro válido do grupo carregado, 
+    // aborta a query imediatamente e previne vazamentos ou erros de permission-denied.
+    if (!currentMember) {
+      setTransactions([]);
+      setLoading(false);
+      return;
+    }
+
+    // Barreira: grupos 'standard' (não-legados) ainda não têm transações no path de couples.
+    // Retorna vazio imediatamente para não gerar erros de permissão.
+    if (group && group.type === 'standard') {
+      setTransactions([]);
+      setLoading(false);
+      return;
+    }
+
+    // Agora buscamos direto de /couples/{coupleId}/transactions
+    // E só precisamos filtrar por monthKey e ordenar.
+    const q = query(
+      transactionsRef(),
+      where("monthKey", "==", monthKey),
+      orderBy("date", "desc"),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const docs: Transaction[] = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data() as any;
+          // Tarefa 4.2: Mapeador de Retrocompatibilidade
+          if (data.paidBy === "Arthur") data.paidBy = "owner";
+          if (data.paidBy === "Zara") data.paidBy = "partner";
+          if (data.from === "Arthur") data.from = "owner";
+          if (data.from === "Zara") data.from = "partner";
+          if (data.to === "Arthur") data.to = "owner";
+          if (data.to === "Zara") data.to = "partner";
+          if (data.splitType === "100% Arthur") data.splitType = "100% owner";
+          if (data.splitType === "100% Zara") data.splitType = "100% partner";
+          
+          return {
+            id: docSnap.id,
+            ...data,
+          } as Transaction;
+        // Exclui pendentes das views shared/zara (geridas por usePendingTransactions)
+        }).filter((t) => !t.status || t.status === "confirmed");
+        setTransactions(docs);
+        setLoading(false);
+      },
+      (err: any) => {
+        console.error("Erro ao carregar transações:", err);
+        if (err.code === "permission-denied") {
+          setError(`Usuário autenticado, mas sem permissão no Firestore. (Talvez o doc couples/${COUPLE_ID} não exista ou UID não esteja em members)`);
+        } else if (err.code === "unavailable") {
+          setError("Firestore indisponível ou sem conexão.");
+        } else if (err.code === "failed-precondition" && err.message?.includes("index")) {
+          // Oculta a URL feia do Firebase e mostra uma mensagem amigável
+          console.warn("Index URL:", err.message);
+          setError("O banco de dados precisa finalizar a criação de um índice. Tente novamente em alguns minutos.");
+        } else {
+          setError(`Erro ao carregar dados: ${err.message}`);
+        }
+        setLoading(false);
+      }
+    );
+
+    return unsubscribe;
+  }, [monthKey, group, currentMember]);
+
+  const addTransaction = useCallback(
+    async (data: TransactionFormData, amountCents: number) => {
+      const baseData = {
+        description: data.description.trim(),
+        coupleId: COUPLE_ID, // Pode manter no doc, mas a regra usa o path
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      if (data.type === "expense" && data.isInstallment && data.installmentCount && data.installmentCount > 1) {
+        const count = data.installmentCount;
+        const baseAmount = Math.floor(amountCents / count);
+        const remainder = amountCents % count;
+        const groupId = doc(collection(db, "couples")).id;
+
+        const [year, month, day] = data.date.split("-").map(Number);
+        
+        const batch = writeBatch(db);
+        
+        for (let i = 1; i <= count; i++) {
+          const installmentAmount = i === 1 ? baseAmount + remainder : baseAmount;
+          
+          const targetMonthZeroIndex = month - 1 + (i - 1);
+          const newYear = year + Math.floor(targetMonthZeroIndex / 12);
+          const newMonthIndex = targetMonthZeroIndex % 12;
+          const lastDayOfTargetMonth = new Date(newYear, newMonthIndex + 1, 0).getDate();
+          const newDay = Math.min(day, lastDayOfTargetMonth);
+          
+          const newMonthStr = String(newMonthIndex + 1).padStart(2, "0");
+          const newDayStr = String(newDay).padStart(2, "0");
+          const newDateStr = `${newYear}-${newMonthStr}-${newDayStr}`;
+
+          // Tarefa 2: Visibilidade e Dono da fatura (Etapa 2.1)
+          // Prioridade: UI fornece personalOwnerUserId -> usa direto.
+          // Fallback: infere por splitType + membro legado.
+          const isPersonalOwner = data.splitType === "100% owner";
+          const isPersonalPartner = data.splitType === "100% partner";
+          const visibility = (isPersonalOwner || isPersonalPartner) ? "personal" : "shared";
+          const personalOwnerUserId =
+            (data as ExpenseFormData).personalOwnerUserId ?? // UI-supplied
+            (isPersonalOwner ? ownerMember?.userId : undefined) ??
+            (isPersonalPartner ? partnerMember?.userId : undefined);
+
+          if (visibility === "personal" && !personalOwnerUserId) {
+            throw new Error("Membros do grupo ainda não carregados. Tente novamente.");
+          }
+
+          const docData = {
+            ...baseData,
+            amount: installmentAmount,
+            date: newDateStr,
+            monthKey: getMonthKey(newDateStr),
+            type: "expense",
+            paidBy: data.paidBy,
+            splitType: data.splitType,
+            installmentCount: count,
+            currentInstallment: i,
+            groupId: groupId,
+            originalAmount: amountCents,
+            visibility: visibility,
+            personalOwnerUserId: personalOwnerUserId,
+          };
+
+          const newDocRef = doc(transactionsRef());
+          batch.set(newDocRef, docData);
+        }
+        await batch.commit();
+      } else {
+        let docData;
+        if (data.type === "expense") {
+          // Prioridade: UI fornece personalOwnerUserId -> usa direto.
+          // Fallback: infere por splitType + membro legado.
+          const isPersonalOwner = data.splitType === "100% owner";
+          const isPersonalPartner = data.splitType === "100% partner";
+          const visibility = (isPersonalOwner || isPersonalPartner) ? "personal" : "shared";
+          const personalOwnerUserId =
+            (data as ExpenseFormData).personalOwnerUserId ?? // UI-supplied
+            (isPersonalOwner ? ownerMember?.userId : undefined) ??
+            (isPersonalPartner ? partnerMember?.userId : undefined);
+
+          if (visibility === "personal" && !personalOwnerUserId) {
+            throw new Error("Membros do grupo ainda não carregados. Tente novamente.");
+          }
+
+          docData = {
+            ...baseData,
+            amount: amountCents,
+            date: data.date,
+            monthKey: getMonthKey(data.date),
+            type: "expense",
+            paidBy: data.paidBy,
+            splitType: data.splitType,
+            visibility: visibility,
+            personalOwnerUserId: personalOwnerUserId,
+          };
+        } else {
+          const visibility = data.pixDestination === "zara_card" ? "personal" : "shared";
+          // Prioridade: UI fornece personalOwnerUserId -> usa direto.
+          const personalOwnerUserId =
+            (data as SettlementFormData).personalOwnerUserId ??
+            (data.pixDestination === "zara_card" ? partnerMember?.userId : undefined);
+
+          if (visibility === "personal" && !personalOwnerUserId) {
+            throw new Error("Membros do grupo ainda não carregados. Tente novamente.");
+          }
+
+          docData = {
+            ...baseData,
+            amount: amountCents,
+            date: data.date,
+            monthKey: getMonthKey(data.date),
+            type: "settlement",
+            from: data.from,
+            to: data.to,
+            pixDestination: data.pixDestination || "shared",
+            visibility: visibility,
+            personalOwnerUserId: personalOwnerUserId,
+          };
+        }
+
+        await addDoc(transactionsRef(), docData);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ownerMember?.userId, partnerMember?.userId, members]
+  );
+
+  const updateTransaction = useCallback(
+    async (originalTransaction: Transaction, data: TransactionFormData, amountCents: number) => {
+      const wasInstallment = originalTransaction.type === "expense" && Boolean(originalTransaction.groupId);
+      const willBeInstallment = data.type === "expense" && Boolean(data.isInstallment) && (data.installmentCount ?? 0) > 1;
+
+      // ─── Cenário A: qualquer mudança envolvendo parcelas ─────────────────────
+      if (wasInstallment || willBeInstallment) {
+        const batch = writeBatch(db);
+
+        // 1. Apagar parcelas antigas
+        const expenseOrig = originalTransaction.type === "expense" ? originalTransaction : null;
+        if (expenseOrig?.groupId) {
+          const oldGroupSnap = await getDocs(
+            query(transactionsRef(), where("groupId", "==", expenseOrig.groupId))
+          );
+          oldGroupSnap.forEach((docSnap) => batch.delete(docSnap.ref));
+        } else {
+          // Era compra única (ex: pending sem groupId) — apaga só o doc original
+          batch.delete(transactionDocRef(originalTransaction.id));
+        }
+
+        // 2. Criar as N novas parcelas no mesmo batch
+        if (willBeInstallment) {
+          const count = data.installmentCount!;
+          const baseAmount = Math.floor(amountCents / count);
+          const remainder = amountCents % count;
+          const newGroupId = doc(collection(db, "couples")).id;
+          const [year, month, day] = data.date.split("-").map(Number);
+
+          for (let i = 1; i <= count; i++) {
+            const installmentAmount = i === 1 ? baseAmount + remainder : baseAmount;
+            const targetMonthZeroIndex = month - 1 + (i - 1);
+            const newYear = year + Math.floor(targetMonthZeroIndex / 12);
+            const newMonthIndex = targetMonthZeroIndex % 12;
+            const lastDayOfTargetMonth = new Date(newYear, newMonthIndex + 1, 0).getDate();
+            const newDay = Math.min(day, lastDayOfTargetMonth);
+            const newDateStr = `${newYear}-${String(newMonthIndex + 1).padStart(2, "0")}-${String(newDay).padStart(2, "0")}`;
+            const isPersonalOwner = data.splitType === "100% owner";
+            const isPersonalPartner = data.splitType === "100% partner";
+            const visibility = (isPersonalOwner || isPersonalPartner) ? "personal" : "shared";
+            const personalOwnerUserId =
+              (data as ExpenseFormData).personalOwnerUserId ??
+              (isPersonalOwner ? ownerMember?.userId : undefined) ??
+              (isPersonalPartner ? partnerMember?.userId : undefined);
+
+            if (visibility === "personal" && !personalOwnerUserId) {
+              throw new Error("Membros do grupo ainda não carregados. Tente novamente.");
+            }
+
+            batch.set(doc(transactionsRef()), {
+              description: data.description.trim(),
+              coupleId: COUPLE_ID,
+              amount: installmentAmount,
+              date: newDateStr,
+              monthKey: getMonthKey(newDateStr),
+              type: "expense",
+              paidBy: data.paidBy,
+              splitType: data.splitType,
+              installmentCount: count,
+              currentInstallment: i,
+              groupId: newGroupId,
+              originalAmount: amountCents,
+              visibility,
+              personalOwnerUserId,
+              status: "confirmed",
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+          }
+        } else {
+          // Passou de parcelado para compra única: cria um novo doc simples
+          let visibility: "shared" | "personal" = "shared";
+          let personalOwnerUserId: string | undefined = undefined;
+
+          if (data.type === "expense") {
+            const isPersonalOwner = data.splitType === "100% owner";
+            const isPersonalPartner = data.splitType === "100% partner";
+            visibility = (isPersonalOwner || isPersonalPartner) ? "personal" : "shared";
+            personalOwnerUserId =
+              (data as ExpenseFormData).personalOwnerUserId ??
+              (isPersonalOwner ? ownerMember?.userId : undefined) ??
+              (isPersonalPartner ? partnerMember?.userId : undefined);
+          } else {
+            visibility = data.pixDestination === "zara_card" ? "personal" : "shared";
+            personalOwnerUserId =
+              (data as SettlementFormData).personalOwnerUserId ??
+              (data.pixDestination === "zara_card" ? partnerMember?.userId : undefined);
+          }
+
+          if (visibility === "personal" && !personalOwnerUserId) {
+            throw new Error("Membros do grupo ainda não carregados. Tente novamente.");
+          }
+
+          batch.set(doc(transactionsRef()), {
+            description: data.description.trim(),
+            coupleId: COUPLE_ID,
+            amount: amountCents,
+            date: data.date,
+            monthKey: getMonthKey(data.date),
+            type: data.type,
+            ...(data.type === "expense"
+              ? { paidBy: data.paidBy, splitType: data.splitType }
+              : { from: data.from, to: data.to, pixDestination: data.pixDestination || "shared" }
+            ),
+            visibility,
+            personalOwnerUserId,
+            status: "confirmed",
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        await batch.commit();
+        return;
+      }
+
+      // ─── Cenário B: edição simples de compra única ─────────────────────────
+      const baseData = {
+        description: data.description.trim(),
+        amount: amountCents,
+        date: data.date,
+        monthKey: getMonthKey(data.date),
+        updatedAt: serverTimestamp(),
+        status: "confirmed" as const,
+      };
+
+      let docData;
+      if (data.type === "expense") {
+        const isPersonalOwner = data.splitType === "100% owner";
+        const isPersonalPartner = data.splitType === "100% partner";
+        const visibility = (isPersonalOwner || isPersonalPartner) ? "personal" : "shared";
+        const personalOwnerUserId =
+          (data as ExpenseFormData).personalOwnerUserId ??
+          (isPersonalOwner ? ownerMember?.userId : undefined) ??
+          (isPersonalPartner ? partnerMember?.userId : undefined);
+        
+        if (visibility === "personal" && !personalOwnerUserId) {
+          throw new Error("Membros do grupo ainda não carregados. Tente novamente.");
+        }
+        
+        docData = { ...baseData, type: "expense" as const, paidBy: data.paidBy, splitType: data.splitType, visibility, personalOwnerUserId };
+      } else {
+        const visibility = data.pixDestination === "zara_card" ? "personal" : "shared";
+        const personalOwnerUserId =
+          (data as SettlementFormData).personalOwnerUserId ??
+          (data.pixDestination === "zara_card" ? partnerMember?.userId : undefined);
+        
+        if (visibility === "personal" && !personalOwnerUserId) {
+          throw new Error("Membros do grupo ainda não carregados. Tente novamente.");
+        }
+        
+        docData = { ...baseData, type: "settlement" as const, from: data.from, to: data.to, pixDestination: data.pixDestination || "shared", visibility, personalOwnerUserId };
+      }
+
+      await updateDoc(transactionDocRef(originalTransaction.id), docData);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ownerMember?.userId, partnerMember?.userId, members]
+  );
+
+  const deleteTransaction = useCallback(async (transaction: Transaction) => {
+    if (transaction.type === "expense" && transaction.groupId) {
+      const q = query(
+        transactionsRef(),
+        where("groupId", "==", transaction.groupId)
+      );
+      const querySnapshot = await getDocs(q);
+      const batch = writeBatch(db);
+      
+      querySnapshot.forEach((docSnap) => {
+        batch.delete(docSnap.ref);
+      });
+      
+      await batch.commit();
+    } else {
+      await deleteDoc(transactionDocRef(transaction.id));
+    }
+  }, []);
+
+  return {
+    transactions,
+    loading,
+    error,
+    addTransaction,
+    updateTransaction,
+    deleteTransaction,
+  };
+}
+
+
+================================================================================
+FILE: src/pages/Home.tsx
+================================================================================
+import React, { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
+import { useTransactions } from "../hooks/useTransactions";
+import { deleteDoc } from "firebase/firestore";
+import { transactionDocRef, COUPLE_ID } from "../lib/firebase";
+import { usePendingTransactions } from "../hooks/usePendingTransactions";
+import { calculateBalance, generatePixSummary } from "../lib/calculations";
+import { getCurrentMonthKey, formatMonthLabel, formatBRL, formatDateBR } from "../lib/formatters";
+import { BalanceCard } from "../components/BalanceCard";
+import { TransactionItem } from "../components/TransactionItem";
+import { AnniversaryCountdown } from "../components/AnniversaryCountdown";
+import { GroupSwitcherSheet } from "../components/GroupSwitcherSheet";
+import { GroupSettingsSheet } from "../components/GroupSettingsSheet";
+import { Button } from "../components/ui/Button";
+import type { Transaction } from "../types";
+import { PARTNER_NAME, OWNER_NAME } from "../constants/couple";
+import { useGroupContext } from "../contexts/GroupContext";
+
+import {
+  isInvoiceTransactionForMember,
+  isSharedTransaction,
+  calculatePersonalInvoiceTotal,
+} from "../lib/transactionVisibility";
+
+type ViewMode = "shared" | "personal" | "pending";
+
+
+// ── Card de transação pendente ────────────────────────────────────────────────
+const PendingTransactionCard: React.FC<{
+  transaction: Transaction;
+  onReview: (t: Transaction) => void;
+  onDelete: (t: Transaction) => void;
+}> = ({ transaction, onReview, onDelete }) => {
+  const isExpense = transaction.type === "expense";
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  return (
+    <div className="card border-l-4 border-l-amber-400/70 animate-fade-in-up">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-base">📥</span>
+            <p className="text-base font-semibold text-text-primary truncate">
+              {transaction.description || "Compra via Apple Pay"}
+            </p>
+          </div>
+          <p className="text-xs text-text-muted mb-1">
+            {isExpense ? formatDateBR(transaction.date) : transaction.date}
+            {" · "}
+            <span className="text-amber-400 font-medium">Aguardando revisão</span>
+          </p>
+          <p className="text-xs text-text-muted">
+            Classificação atual: Minha Fatura / Nossos Gastos
+          </p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-lg font-bold tabular-nums text-amber-400">
+            {formatBRL(transaction.amount)}
+          </p>
+        </div>
+      </div>
+      <div className="flex gap-2 mt-3 pt-3 border-t border-border">
+        <button
+          onClick={() => onReview(transaction)}
+          className="flex-1 py-2 text-sm font-semibold rounded-xl bg-accent-pink/20 text-accent-pink hover:bg-accent-pink/30 transition-colors"
+        >
+          ✏️ Revisar
+        </button>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="px-4 py-2 text-sm font-medium rounded-xl bg-bg-elevated text-text-muted hover:text-accent-red hover:bg-accent-red/10 transition-colors"
+        >
+          🗑
+        </button>
+      </div>
+
+      {isModalOpen && createPortal(
+        <div style={{ zIndex: 9999 }} className="fixed inset-0 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fade-in-up">
+          <div className="bg-bg-elevated p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-border">
+            <h3 className="text-lg font-bold text-text-primary mb-2">Excluir pendente</h3>
+            <p className="text-sm text-text-secondary mb-6 leading-relaxed">
+              Tem certeza que deseja excluir esta despesa pendente? O valor de {formatBRL(transaction.amount)} será ignorado.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-text-primary bg-bg-card hover:bg-border rounded-xl transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  onDelete(transaction);
+                  setIsModalOpen(false);
+                }}
+                className="px-4 py-2 text-sm font-medium bg-accent-red/20 text-accent-red hover:bg-accent-red/30 rounded-xl transition-colors"
+              >
+                Confirmar Exclusão
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+};
+
+// ── Página principal ──────────────────────────────────────────────────────────
+export const HomePage: React.FC = () => {
+  const navigate = useNavigate();
+  const currentMonth = getCurrentMonthKey();
+  const { group, members, currentMember } = useGroupContext();
+
+  const { transactions, loading, error } = useTransactions(currentMonth);
+  const { pendingTransactions, pendingCount, loading: pendingLoading } = usePendingTransactions();
+
+  const [copied, setCopied] = useState(false);
+  const [isGroupSheetOpen, setIsGroupSheetOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const stored = sessionStorage.getItem("casalpay_viewMode");
+    return (stored === "shared" || stored === "personal" || stored === "pending") 
+      ? (stored as ViewMode) 
+      : "shared";
+  });
+
+  // Atualiza a sessionStorage sempre que a aba mudar, e escuta o BottomNav
+  React.useEffect(() => {
+    sessionStorage.setItem("casalpay_viewMode", viewMode);
+  }, [viewMode]);
+
+  React.useEffect(() => {
+    const handleHomeClick = () => setViewMode("shared");
+    window.addEventListener("casalpay_home_clicked", handleHomeClick);
+    return () => window.removeEventListener("casalpay_home_clicked", handleHomeClick);
+  }, []);
+
+  // ── Filtragem das abas compartilhada e fatura ────────────────────────────────
+  const sharedTransactions = useMemo(
+    () => transactions.filter(t => isSharedTransaction(t, members)),
+    [transactions, members]
+  );
+
+  const myTransactions = useMemo(
+    () => transactions.filter((t) => isInvoiceTransactionForMember(t, currentMember, members)),
+    [transactions, currentMember, members]
+  );
+
+  // ── Cálculos ─────────────────────────────────────────────────────────────────
+  const balance = useMemo(
+    () => calculateBalance(sharedTransactions),
+    [sharedTransactions]
+  );
+
+  const myInvoiceTotal = useMemo(
+    () => calculatePersonalInvoiceTotal(myTransactions, currentMember, members),
+    [myTransactions, currentMember, members]
+  );
+
+  // ── Lista ativa por aba ───────────────────────────────────────────────────────
+  const activeTransactions =
+    viewMode === "shared"   ? sharedTransactions  :
+    viewMode === "personal" ? myTransactions      :
+    pendingTransactions;
+
+  const recentTransactions = viewMode === "pending"
+    ? activeTransactions          // Pendentes: mostrar todos
+    : activeTransactions.slice(0, 5);
+
+  // ── Handlers ─────────────────────────────────────────────────────────────────
+  const handleCopyPix = async () => {
+    const text = generatePixSummary(balance, formatMonthLabel(currentMonth));
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const el = document.createElement("textarea");
+      el.value = text;
+      el.style.position = "absolute";
+      el.style.left = "-9999px";
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  const handleReviewPending = (t: Transaction) => {
+    // Reutiliza o fluxo de edição do AddExpense — ao salvar, updateTransaction
+    // irá gravar status: 'confirmed' automaticamente.
+    navigate("/add", { state: { transaction: t } });
+  };
+
+  const handleDeletePending = async (t: Transaction) => {
+    try {
+      await deleteDoc(transactionDocRef(t.id));
+    } catch (err) {
+      console.error("Erro ao excluir despesa pendente", err);
+    }
+  };
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center flex-1 px-5 gap-4">
+        <span className="text-4xl">😕</span>
+        <p className="text-text-secondary text-center">{error}</p>
+        <Button onClick={() => window.location.reload()} size="sm" variant="secondary">
+          Tentar novamente
+        </Button>
+      </div>
+    );
+  }
+
+  // ── Rótulos das abas ──────────────────────────────────────────────────────────
+  // Removemos o número do label de texto para usar apenas o badge visual
+  const pendingLabel = "Pendentes";
+
+  return (
+    <main className="flex-1 overflow-y-auto pb-24">
+      {/* Header */}
+      <header className="px-6 pt-12 pb-4 flex items-center justify-between">
+        <div>
+          {/* Grupo ativo com botão de troca */}
+          <button
+            id="btn-group-switcher"
+            onClick={() => setIsGroupSheetOpen(true)}
+            className="flex items-center gap-2 group mb-0.5 -ml-0.5 px-1 py-0.5 rounded-xl transition-colors hover:bg-white/5 active:bg-white/10"
+            aria-label="Trocar grupo ativo"
+          >
+            <h1 className="text-2xl font-bold tracking-tight text-text-primary">
+              {group?.name ?? `${OWNER_NAME} e ${PARTNER_NAME}`}
+            </h1>
+            {/* Chevron animado */}
+            <svg
+              className="w-5 h-5 text-text-muted mt-0.5 transition-transform duration-200 group-hover:translate-y-0.5"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+          <p className="text-text-muted text-sm font-medium">Divisão de despesas</p>
+        </div>
+
+        {group && (
+          <button onClick={() => setIsSettingsOpen(true)} className="p-2 rounded-full bg-bg-elevated hover:bg-white/5 transition-colors border border-border">
+            <svg className="w-5 h-5 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+        )}
+      </header>
+
+      {/* Bottom Sheet de troca de grupo */}
+      <GroupSwitcherSheet
+        isOpen={isGroupSheetOpen}
+        onClose={() => setIsGroupSheetOpen(false)}
+      />
+
+      <div className="px-5 flex flex-col gap-4">
+
+        {/* ── Toggle de três abas ──────────────────────────────────────────────── */}
+        <div className="relative flex bg-bg-elevated rounded-xl p-1 border border-border">
+          {/* Sliding Pill */}
+          <div
+            className={`absolute top-1 bottom-1 w-[calc(33.333%-0.167rem)] rounded-lg transition-all duration-300 ease-in-out shadow-sm ${
+              viewMode === "shared"   ? "translate-x-0      bg-accent-pink"  :
+              viewMode === "personal" ? "translate-x-[100%] bg-[#A855F7]"    :
+                                        "translate-x-[200%] bg-amber-500"
+            }`}
+          />
+
+          <button
+            id="tab-shared"
+            onClick={() => setViewMode("shared")}
+            className={`relative z-10 flex-1 py-2.5 text-xs font-medium rounded-lg transition-colors duration-300 ${
+              viewMode === "shared" ? "text-white" : "text-text-muted hover:text-text-secondary"
+            }`}
+          >
+            Nossos Gastos
+          </button>
+
+          <button
+            id="tab-personal"
+            onClick={() => setViewMode("personal")}
+            className={`relative z-10 flex-1 py-2.5 text-xs font-medium rounded-lg transition-colors duration-300 ${
+              viewMode === "personal" ? "text-white" : "text-text-muted hover:text-text-secondary"
+            }`}
+          >
+            Minha Fatura
+          </button>
+
+          <button
+            id="tab-pending"
+            onClick={() => setViewMode("pending")}
+            className={`relative z-10 flex-1 py-2.5 text-xs font-medium rounded-lg transition-colors duration-300 ${
+              viewMode === "pending" ? "text-white" : "text-text-muted hover:text-text-secondary"
+            }`}
+          >
+            {pendingLabel}
+            {pendingCount > 0 && viewMode !== "pending" && (
+              <span className="ml-1 inline-flex items-center justify-center w-4 h-4 text-[9px] font-bold bg-amber-400 text-bg-card rounded-full">
+                {pendingCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* ── Card principal condicional ───────────────────────────────────────── */}
+        {(loading && viewMode !== "pending") ? (
+          <div className="card flex items-center justify-center py-12">
+            <span className="spinner" />
+          </div>
+        ) : viewMode === "shared" ? (
+          <BalanceCard
+            balance={balance}
+            monthKey={currentMonth}
+            onCopyPix={handleCopyPix}
+            copied={copied}
+          />
+        ) : viewMode === "personal" ? (
+          <div className="card animate-fade-in-up">
+            <p className="text-sm text-text-muted mb-1 font-medium text-center">
+              Total da Minha Fatura
+            </p>
+            <p className="text-3xl font-bold text-center tabular-nums text-text-primary mb-3">
+              {formatBRL(Math.max(0, myInvoiceTotal))}
+            </p>
+            {myInvoiceTotal < 0 ? (
+              <p className="text-xs text-accent-green text-center">
+                Crédito de {formatBRL(Math.abs(myInvoiceTotal))} para a próxima fatura
+              </p>
+            ) : (
+              <div className="flex items-center justify-between text-xs text-text-muted border-t border-border pt-3 mt-1">
+                <span>{myTransactions.filter((t) => t.type === "expense").length} compras</span>
+                <span>{myTransactions.filter((t) => t.type === "settlement").length} pagamentos</span>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* ── Card de caixa de entrada ─────────────────────────────────────── */
+          <div className="card animate-fade-in-up border border-amber-400/20 bg-amber-400/5">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">📥</span>
+              <div>
+                <p className="text-base font-bold text-text-primary">
+                  Caixa de Entrada
+                </p>
+                <p className="text-xs text-text-muted">
+                  {pendingLoading
+                    ? "Carregando..."
+                    : pendingCount === 0
+                    ? "Nenhuma compra aguardando revisão"
+                    : `${pendingCount} compra${pendingCount > 1 ? "s" : ""} aguardando revisão`}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Lista de transações ──────────────────────────────────────────────── */}
+        <div>
+          {viewMode !== "pending" && (
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold text-text-primary">
+                {viewMode === "shared" ? "Últimas despesas" : "Minha Fatura"}
+              </h2>
+              {activeTransactions.length > 5 && (
+                <button
+                  onClick={() => navigate("/history")}
+                  className="text-sm text-accent-pink font-medium"
+                >
+                  Ver todas →
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ── Loading ─────────────────────────────────────────────────────── */}
+          {(viewMode === "pending" ? pendingLoading : loading) ? (
+            <div className="flex flex-col gap-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="card h-20 animate-pulse bg-bg-elevated opacity-50" />
+              ))}
+            </div>
+
+          /* ── Aba Pendentes ─────────────────────────────────────────────────── */
+          ) : viewMode === "pending" ? (
+            pendingTransactions.length === 0 ? (
+              <div className="card flex flex-col items-center py-10 gap-3 text-center">
+                <span className="text-4xl">✅</span>
+                <p className="text-text-secondary font-medium">Tudo em dia!</p>
+                <p className="text-text-muted text-sm max-w-xs">
+                  As compras enviadas pelo iPhone via Apple Pay/Shortcuts aparecerão aqui para revisão.
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {pendingTransactions.map((t) => (
+                  <PendingTransactionCard
+                    key={t.id}
+                    transaction={t}
+                    onReview={handleReviewPending}
+                    onDelete={handleDeletePending}
+                  />
+                ))}
+              </div>
+            )
+
+          /* ── Abas shared/personal ─────────────────────────────────────────────── */
+          ) : recentTransactions.length === 0 ? (
+            <div className="bg-bg-card border border-border rounded-3xl flex flex-col items-center py-12 gap-3 text-center px-6">
+              <span className="text-4xl">{viewMode === "shared" ? "🛍️" : "💳"}</span>
+              <p className="text-text-primary font-semibold">
+                {group?.type === 'standard'
+                  ? 'Nenhuma transação financeira registrada neste grupo ainda.'
+                  : viewMode === "shared"
+                  ? "Nenhuma despesa ainda"
+                  : "Nenhuma despesa pessoal lançada"}
+              </p>
+              <p className="text-text-muted text-sm max-w-xs">
+                {viewMode === "shared"
+                  ? "Adicione a primeira compra do mês."
+                  : "Suas compras pessoais ou no cartão de crédito aparecerão aqui."}
+              </p>
+              {viewMode === "shared" && (
+                <Button size="sm" onClick={() => navigate("/add")} className="mt-2">
+                  + Adicionar despesa
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {recentTransactions.map((t) => (
+                <TransactionItem key={t.id} transaction={t} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Botão de adicionar — só em Nossos Gastos */}
+        {viewMode === "shared" && activeTransactions.length > 0 && !loading && (
+          <Button
+            id="btn-add-expense-home"
+            fullWidth
+            onClick={() => navigate("/add")}
+            className="mt-2"
+          >
+            + Adicionar despesa
+          </Button>
+        )}
+
+        {group?.id === COUPLE_ID && <AnniversaryCountdown />}
+      </div>
+      
+      <GroupSettingsSheet isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+    </main>
+  );
+};
+
+
+================================================================================
+FILE: src/pages/Messages.tsx
+================================================================================
+import React, { useState, Component } from "react";
+import { useAuth } from "../hooks/useAuth";
+import { useNotificationContext } from "../contexts/NotificationContext";
+import {
+  OWNER_NAME,
+  PARTNER_NAME,
+  OWNER_EMOJI,
+  PARTNER_EMOJI,
+} from "../constants/couple";
+
+// ─── Mensagens disponíveis ─────────────────────────────────────────────────
+interface LoveMessage {
+  id: string;
+  emoji: string;
+  text: string;
+  color: "pink" | "blue" | "purple" | "green";
+}
+
+const LOVE_MESSAGES: LoveMessage[] = [
+  { id: "saudades",    emoji: "❤️",  text: "Saudades",           color: "pink"   },
+  { id: "te-amo",      emoji: "💕",  text: "Te amo",             color: "pink"   },
+  { id: "beijinho",    emoji: "😘",  text: "Beijinho",           color: "purple" },
+  { id: "fazendo-que", emoji: "🧐",  text: "Fazendo o quê?",     color: "blue"   },
+  { id: "com-fome",    emoji: "🍕",  text: "Tô com fome",        color: "purple" },
+  { id: "pensando",    emoji: "💭",  text: "Pensando em você",   color: "blue"   },
+];
+
+const COLOR_MAP = {
+  pink:   { border: "border-accent-pink/30",   bg: "bg-accent-pink/10",   glow: "shadow-[0_0_20px_rgba(232,121,160,0.15)]",  text: "text-accent-pink"   },
+  blue:   { border: "border-accent-blue/30",   bg: "bg-accent-blue/10",   glow: "shadow-[0_0_20px_rgba(123,143,255,0.15)]",  text: "text-accent-blue"   },
+  purple: { border: "border-violet-400/30",    bg: "bg-violet-500/10",    glow: "shadow-[0_0_20px_rgba(167,139,250,0.15)]",  text: "text-violet-400"    },
+  green:  { border: "border-accent-green/30",  bg: "bg-accent-green/10",  glow: "shadow-[0_0_20px_rgba(74,222,128,0.15)]",   text: "text-accent-green"  },
+};
+
+// ─── Error Boundary local para capturar crashes do FCM/notificação ────────
+interface FcmErrorBoundaryState {
+  hasError: boolean;
+  errorMessage: string;
+}
+
+class FcmErrorBoundary extends Component<
+  { children: React.ReactNode },
+  FcmErrorBoundaryState
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, errorMessage: "" };
+  }
+
+  static getDerivedStateFromError(err: Error): FcmErrorBoundaryState {
+    return { hasError: true, errorMessage: err.message };
+  }
+
+  componentDidCatch(err: Error) {
+    console.error("[FCM ErrorBoundary] Capturou erro:", err.message);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <main className="flex flex-col flex-1 pb-28 max-w-md mx-auto w-full items-center justify-center px-6" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+          <div className="w-16 h-16 rounded-full bg-bg-elevated border border-border flex items-center justify-center mb-5">
+            <span className="text-3xl">📫</span>
+          </div>
+          <h2 className="text-lg font-bold text-text-primary text-center mb-2">Chat Offline</h2>
+          <p className="text-sm text-text-secondary text-center max-w-[280px] mb-6">
+            O serviço de mensagens não está disponível agora. Verifique sua conexão ou reinicie o aplicativo.
+          </p>
+          <p className="text-xs text-text-muted/60 font-mono text-center">{this.state.errorMessage}</p>
+        </main>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ─── Componente principal ──────────────────────────────────────────────────
+export const MessagesPage: React.FC = () => {
+  const { user } = useAuth();
+  const { permission, requestPermission, pushStatus, pushError } = useNotificationContext();
+  
+  const [sending, setSending] = useState<string | null>(null);
+  const [sent, setSent]       = useState<string | null>(null);
+  const [sentCount, setSentCount] = useState<number>(0);
+  const [error, setError]     = useState<string | null>(null);
+
+  const isOwner    = user?.email?.toLowerCase().startsWith("arthur");
+  const senderName = isOwner ? OWNER_NAME   : PARTNER_NAME;
+  const senderEmoji= isOwner ? OWNER_EMOJI  : PARTNER_EMOJI;
+  const targetName = isOwner ? PARTNER_NAME : OWNER_NAME;
+  const targetEmoji= isOwner ? PARTNER_EMOJI: OWNER_EMOJI;
+
+  const handleSend = async (msg: LoveMessage) => {
+    if (sending) return;
+    setSending(msg.id);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/send-notification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          target:  targetName,
+          title:   `${senderName}:`,
+          message: `${msg.emoji} ${msg.text}`,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error ?? `Erro ${response.status}`);
+      }
+
+      // Só mostra "Enviado!" se successCount > 0 (entrega real confirmada)
+      const confirmedCount = data.successCount ?? data.sent ?? 0;
+      if (confirmedCount === 0) {
+        throw new Error(
+          data.error ?? `Nenhum aparelho ativo encontrado para ${targetName}.`
+        );
+      }
+
+      setSentCount(confirmedCount);
+      setSent(msg.id);
+      setTimeout(() => { setSent(null); setSentCount(0); }, 3500);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erro ao enviar";
+      setError(message);
+      setTimeout(() => setError(null), 6000);
+    } finally {
+      setSending(null);
+    }
+  };
+
+  // Label do status de registro do dispositivo
+  const deviceStatusLabel = () => {
+    if (permission !== "granted") return null;
+    switch (pushStatus) {
+      case "registering": return { text: "Registrando este aparelho...", color: "text-accent-blue" };
+      case "registered":  return { text: "✅ Aparelho registrado", color: "text-accent-green" };
+      case "error":       return { text: `⚠️ ${pushError ?? "Não foi possível registrar este aparelho"}`, color: "text-accent-red" };
+      default:            return null;
+    }
+  };
+  const deviceStatus = deviceStatusLabel();
+
+  // ── Fallback UI quando o serviço FCM estiver em modo de erro crítico ──────
+  // Isso ocorre quando o VAPID_KEY não está configurado (dev local sem .env)
+  // ou quando o Admin SDK não está disponível no ambiente serverless.
+  const isFcmCriticallyDown =
+    pushStatus === "error" &&
+    pushError !== null &&
+    (pushError.includes("VAPID") ||
+      pushError.includes("Admin SDK") ||
+      pushError.includes("não configurado"));
+
+  if (isFcmCriticallyDown) {
+    return (
+      <main
+        className="flex flex-col flex-1 pb-28 max-w-md mx-auto w-full items-center justify-center px-6"
+        style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+      >
+        <div className="w-20 h-20 rounded-full bg-bg-elevated border border-dashed border-border flex items-center justify-center mb-6">
+          <span className="text-4xl">📫</span>
+        </div>
+        <h2 className="text-xl font-bold text-text-primary text-center mb-2">Chat Offline</h2>
+        <p className="text-sm text-text-secondary text-center mb-6 max-w-[280px]">
+          O serviço de mensagens requer configuração adicional no servidor. Em ambiente de produção funcionará normalmente.
+        </p>
+        <div className="w-full max-w-[300px] bg-bg-elevated rounded-2xl border border-border p-4">
+          <p className="text-xs font-semibold text-text-muted uppercase tracking-widest mb-2">Detalhes</p>
+          <p className="text-xs text-text-muted/70 font-mono break-all">{pushError}</p>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <FcmErrorBoundary>
+    <main
+      className="flex flex-col flex-1 pb-28 max-w-md mx-auto w-full"
+      style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+    >
+      {/* ── Header ────────────────────────────────────────────────────────── */}
+      <div className="px-5 pt-8 pb-2 animate-fade-in-up">
+        <h1 className="text-2xl font-bold text-text-primary tracking-tight">
+          Mensagens 💌
+        </h1>
+        <p className="text-sm text-text-muted mt-1">
+          Mande um carinho para {targetName} agora mesmo
+        </p>
+      </div>
+
+      {/* ── Alerta de Permissão de Notificação ──────────────────────────────── */}
+      {permission !== "granted" && (
+        <div className="px-5 mt-3 animate-fade-in-up">
+          <div className="card border border-accent-blue/30 bg-accent-blue/10 flex flex-col gap-3">
+            <div className="flex items-start gap-3">
+              <span className="text-xl">🔔</span>
+              <div>
+                <p className="text-sm font-semibold text-text-primary">Ativar Notificações</p>
+                <p className="text-xs text-text-muted mt-0.5 leading-relaxed">
+                  Para receber e enviar mensagens em tempo real, precisamos da sua permissão.
+                </p>
+              </div>
+            </div>
+            
+            {permission === "default" && (
+              <button
+                onClick={requestPermission}
+                className="w-full py-2.5 rounded-xl bg-accent-blue text-white text-sm font-semibold active:scale-95 transition-transform"
+              >
+                Ativar Notificações
+              </button>
+            )}
+
+            {permission === "denied" && (
+              <p className="text-xs text-accent-red font-medium">
+                Notificações bloqueadas. Acesse os Ajustes do seu celular, encontre o app na lista e ative as notificações.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Status do dispositivo (após permissão concedida) ───────────────── */}
+      {deviceStatus && (
+        <div className="px-5 mt-2 animate-fade-in-up">
+          <p className={`text-xs text-center font-medium ${deviceStatus.color}`}>
+            {deviceStatus.text}
+          </p>
+        </div>
+      )}
+
+      {/* ── Card "De → Para" ──────────────────────────────────────────────── */}
+      <div className="px-5 mt-5 animate-fade-in-up">
+        <div className="card border border-border flex items-center gap-4">
+          {/* Remetente */}
+          <div className="flex flex-col items-center gap-1 min-w-[56px]">
+            <div className="w-12 h-12 rounded-full bg-accent-blue/15 border border-accent-blue/20 flex items-center justify-center text-2xl">
+              {senderEmoji}
+            </div>
+            <span className="text-[10px] text-text-muted font-medium">{senderName}</span>
+          </div>
+
+          {/* Seta animada */}
+          <div className="flex-1 flex items-center justify-center gap-1">
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                className="inline-block w-1.5 h-1.5 rounded-full bg-accent-pink animate-soft-pulse"
+                style={{ animationDelay: `${i * 0.25}s` }}
+              />
+            ))}
+            <span className="text-accent-pink text-lg mx-1">→</span>
+            {[3, 4, 5].map((i) => (
+              <span
+                key={i}
+                className="inline-block w-1.5 h-1.5 rounded-full bg-accent-pink animate-soft-pulse"
+                style={{ animationDelay: `${(i - 3) * 0.25}s` }}
+              />
+            ))}
+          </div>
+
+          {/* Destinatário */}
+          <div className="flex flex-col items-center gap-1 min-w-[56px]">
+            <div className="w-12 h-12 rounded-full bg-accent-pink/15 border border-accent-pink/20 flex items-center justify-center text-2xl shadow-[0_0_16px_rgba(232,121,160,0.25)]">
+              {targetEmoji}
+            </div>
+            <span className="text-[10px] text-text-muted font-medium">{targetName}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Grid de mensagens ─────────────────────────────────────────────── */}
+      <div className="px-5 mt-5 grid grid-cols-2 gap-3 animate-fade-in-up" style={{ animationDelay: "100ms" }}>
+        {LOVE_MESSAGES.map((msg) => {
+          const isSending = sending === msg.id;
+          const isSent    = sent    === msg.id;
+          const isBlocked = !!sending && !isSending;
+          const c         = isSent ? COLOR_MAP.green : COLOR_MAP[msg.color];
+
+          return (
+            <button
+              key={msg.id}
+              type="button"
+              onClick={() => handleSend(msg)}
+              disabled={!!sending}
+              aria-label={`Enviar mensagem: ${msg.text}`}
+              className={[
+                "relative flex flex-col items-center justify-center gap-2.5",
+                "rounded-3xl p-5 border transition-all duration-200",
+                "active:scale-95 select-none min-h-[110px]",
+                isSent
+                  ? `${COLOR_MAP.green.border} ${COLOR_MAP.green.bg} ${COLOR_MAP.green.glow}`
+                  : `${c.border} ${c.bg} ${c.glow} bg-bg-elevated`,
+                isSending ? "opacity-70 cursor-wait" : "",
+                isBlocked  ? "opacity-35 cursor-not-allowed" : "",
+              ].join(" ")}
+            >
+              {/* Emoji / Check */}
+              <span
+                className={`text-3xl transition-transform duration-200 ${isSending ? "animate-soft-pulse" : ""}`}
+              >
+                {isSent ? "✅" : msg.emoji}
+              </span>
+
+              {/* Texto */}
+              <span
+                className={`text-sm font-semibold text-center leading-tight ${
+                  isSent ? "text-accent-green" : "text-text-primary"
+                }`}
+              >
+                {isSent
+                  ? `Enviado para ${sentCount} aparelho${sentCount !== 1 ? "s" : ""}!`
+                  : msg.text}
+              </span>
+
+              {/* Spinner overlay enquanto envia */}
+              {isSending && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-3xl bg-bg-card/60 backdrop-blur-sm">
+                  <span className="spinner" />
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── Feedback de erro ──────────────────────────────────────────────── */}
+      {error && (
+        <div className="mx-5 mt-4 card border border-accent-red/30 bg-accent-red/10 animate-fade-in-up">
+          <p className="text-sm text-accent-red text-center">⚠️ {error}</p>
+        </div>
+      )}
+
+      {/* ── Aviso de iOS ──────────────────────────────────────────────────── */}
+      <div className="mx-5 mt-6 animate-fade-in-up" style={{ animationDelay: "200ms" }}>
+        <div className="card border border-border bg-bg-elevated/40">
+          <p className="text-[11px] text-text-muted text-center leading-relaxed">
+            🔔 A notificação chega no celular de{" "}
+            <span className="text-text-secondary font-medium">{targetName}</span>{" "}
+            mesmo com o app fechado.
+            <br />
+            <span className="text-text-muted/70">
+              (No iPhone, adicione o app à Tela de Início primeiro)
+            </span>
+          </p>
+        </div>
+      </div>
+    </main>
+    </FcmErrorBoundary>
+  );
+};
+

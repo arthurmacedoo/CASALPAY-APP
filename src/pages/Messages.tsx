@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, Component } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useNotificationContext } from "../contexts/NotificationContext";
 import {
@@ -31,6 +31,48 @@ const COLOR_MAP = {
   purple: { border: "border-violet-400/30",    bg: "bg-violet-500/10",    glow: "shadow-[0_0_20px_rgba(167,139,250,0.15)]",  text: "text-violet-400"    },
   green:  { border: "border-accent-green/30",  bg: "bg-accent-green/10",  glow: "shadow-[0_0_20px_rgba(74,222,128,0.15)]",   text: "text-accent-green"  },
 };
+
+// ─── Error Boundary local para capturar crashes do FCM/notificação ────────
+interface FcmErrorBoundaryState {
+  hasError: boolean;
+  errorMessage: string;
+}
+
+class FcmErrorBoundary extends Component<
+  { children: React.ReactNode },
+  FcmErrorBoundaryState
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, errorMessage: "" };
+  }
+
+  static getDerivedStateFromError(err: Error): FcmErrorBoundaryState {
+    return { hasError: true, errorMessage: err.message };
+  }
+
+  componentDidCatch(err: Error) {
+    console.error("[FCM ErrorBoundary] Capturou erro:", err.message);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <main className="flex flex-col flex-1 pb-28 max-w-md mx-auto w-full items-center justify-center px-6" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+          <div className="w-16 h-16 rounded-full bg-bg-elevated border border-border flex items-center justify-center mb-5">
+            <span className="text-3xl">📫</span>
+          </div>
+          <h2 className="text-lg font-bold text-text-primary text-center mb-2">Chat Offline</h2>
+          <p className="text-sm text-text-secondary text-center max-w-[280px] mb-6">
+            O serviço de mensagens não está disponível agora. Verifique sua conexão ou reinicie o aplicativo.
+          </p>
+          <p className="text-xs text-text-muted/60 font-mono text-center">{this.state.errorMessage}</p>
+        </main>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ─── Componente principal ──────────────────────────────────────────────────
 export const MessagesPage: React.FC = () => {
@@ -102,7 +144,39 @@ export const MessagesPage: React.FC = () => {
   };
   const deviceStatus = deviceStatusLabel();
 
+  // ── Fallback UI quando o serviço FCM estiver em modo de erro crítico ──────
+  // Isso ocorre quando o VAPID_KEY não está configurado (dev local sem .env)
+  // ou quando o Admin SDK não está disponível no ambiente serverless.
+  const isFcmCriticallyDown =
+    pushStatus === "error" &&
+    pushError !== null &&
+    (pushError.includes("VAPID") ||
+      pushError.includes("Admin SDK") ||
+      pushError.includes("não configurado"));
+
+  if (isFcmCriticallyDown) {
+    return (
+      <main
+        className="flex flex-col flex-1 pb-28 max-w-md mx-auto w-full items-center justify-center px-6"
+        style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+      >
+        <div className="w-20 h-20 rounded-full bg-bg-elevated border border-dashed border-border flex items-center justify-center mb-6">
+          <span className="text-4xl">📫</span>
+        </div>
+        <h2 className="text-xl font-bold text-text-primary text-center mb-2">Chat Offline</h2>
+        <p className="text-sm text-text-secondary text-center mb-6 max-w-[280px]">
+          O serviço de mensagens requer configuração adicional no servidor. Em ambiente de produção funcionará normalmente.
+        </p>
+        <div className="w-full max-w-[300px] bg-bg-elevated rounded-2xl border border-border p-4">
+          <p className="text-xs font-semibold text-text-muted uppercase tracking-widest mb-2">Detalhes</p>
+          <p className="text-xs text-text-muted/70 font-mono break-all">{pushError}</p>
+        </div>
+      </main>
+    );
+  }
+
   return (
+    <FcmErrorBoundary>
     <main
       className="flex flex-col flex-1 pb-28 max-w-md mx-auto w-full"
       style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
@@ -275,5 +349,6 @@ export const MessagesPage: React.FC = () => {
         </div>
       </div>
     </main>
+    </FcmErrorBoundary>
   );
 };

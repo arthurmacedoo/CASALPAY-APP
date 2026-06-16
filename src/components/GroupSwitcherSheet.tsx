@@ -31,7 +31,7 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { group, members, loading: activeLoading, switchGroup, createGroup, joinGroup } = useGroupContext();
+  const { group, members, loading: activeLoading, switchGroup, createGroup, joinGroup, currentMember } = useGroupContext();
   const { user } = useAuth();
   const { groups: userGroups, loading: groupsLoading } = useUserGroups(user);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -135,6 +135,12 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
               </div>
             ))}
           </div>
+        ) : userGroups.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-6 px-4 text-center border border-dashed border-border rounded-2xl bg-bg-elevated/50">
+            <span className="text-2xl mb-2">📭</span>
+            <p className="text-sm font-semibold text-text-primary mb-1">Nenhum grupo</p>
+            <p className="text-xs text-text-secondary">Você ainda não participa de nenhum grupo financeiro. Crie ou entre em um grupo abaixo para começar.</p>
+          </div>
         ) : (
           <div className="flex flex-col gap-2">
             {userGroups.map((g) => {
@@ -189,7 +195,7 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
         )}
 
         {/* ── Membros do grupo ativo ─────────────────────────────────────────────── */}
-        {!activeLoading && members.length > 0 && (
+        {!activeLoading && group && currentMember && members.length > 0 && (
           <div className="mt-4">
             <p className="text-xs font-semibold text-text-muted uppercase tracking-widest mb-2 px-1">
               Membros

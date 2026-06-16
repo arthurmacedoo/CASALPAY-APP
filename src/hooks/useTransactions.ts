@@ -38,13 +38,22 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { members, group } = useGroupContext();
+  const { members, group, currentMember } = useGroupContext();
   const ownerMember = members.find((m) => getLegacyRoleForMember(m) === "owner");
   const partnerMember = members.find((m) => getLegacyRoleForMember(m) === "partner");
 
   useEffect(() => {
     setLoading(true);
     setError(null);
+
+    // Query Bailing: Proteção estrita multi-grupos.
+    // Se o usuário não for um membro válido do grupo carregado, 
+    // aborta a query imediatamente e previne vazamentos ou erros de permission-denied.
+    if (!currentMember) {
+      setTransactions([]);
+      setLoading(false);
+      return;
+    }
 
     // Barreira: grupos 'standard' (não-legados) ainda não têm transações no path de couples.
     // Retorna vazio imediatamente para não gerar erros de permissão.
@@ -105,7 +114,7 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
     );
 
     return unsubscribe;
-  }, [monthKey, group]);
+  }, [monthKey, group, currentMember]);
 
   const addTransaction = useCallback(
     async (data: TransactionFormData, amountCents: number) => {

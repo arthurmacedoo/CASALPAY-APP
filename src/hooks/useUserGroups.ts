@@ -9,11 +9,7 @@ export function useUserGroups(user: User | null) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) {
-      setGroups([]);
-      setLoading(false);
-      return;
-    }
+    if (!user?.uid) { setGroups([]); setLoading(false); return; }
 
     // Busca grupos standard onde o usuário está no array memberIds
     const q = query(collection(db, 'groups'), where('memberIds', 'array-contains', user.uid));
@@ -42,7 +38,7 @@ export function useUserGroups(user: User | null) {
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user?.uid]);
 
   return { groups, loading };
 }

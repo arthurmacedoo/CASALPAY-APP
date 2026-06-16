@@ -218,37 +218,6 @@ export const HomePage: React.FC = () => {
   // Removemos o número do label de texto para usar apenas o badge visual
   const pendingLabel = "Pendentes";
 
-  // Se o usuário logou mas não pertence ao grupo atual (ex: usuário novo recém-registrado)
-  if (!currentMember) {
-    return (
-      <main className="flex-1 overflow-y-auto pb-24 flex flex-col items-center justify-center px-6">
-        <div className="w-20 h-20 rounded-full bg-accent-blue/10 flex items-center justify-center mb-6">
-          <span className="text-4xl">👋</span>
-        </div>
-        <h2 className="text-2xl font-bold text-text-primary text-center mb-2">Bem-vindo(a)!</h2>
-        <p className="text-text-secondary text-center mb-8 max-w-[280px]">
-          Você ainda não faz parte de nenhum grupo financeiro. Crie o seu grupo ou entre em um usando o código de convite.
-        </p>
-        <button 
-          onClick={() => setIsGroupSheetOpen(true)}
-          className="px-6 py-3.5 bg-accent-blue text-white font-semibold rounded-xl shadow-glow-blue hover:bg-accent-blue/90 transition-all active:scale-[0.98]"
-        >
-          Configurar Meu Grupo
-        </button>
-
-        {/* Mantemos os modais vitais injetados */}
-        <GroupSwitcherSheet
-          isOpen={isGroupSheetOpen}
-          onClose={() => setIsGroupSheetOpen(false)}
-        />
-        <GroupSettingsSheet
-          isOpen={isSettingsOpen}
-          onClose={() => setIsSettingsOpen(false)}
-        />
-      </main>
-    );
-  }
-
   return (
     <main className="flex-1 overflow-y-auto pb-24">
       {/* Header */}

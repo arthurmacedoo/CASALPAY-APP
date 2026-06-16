@@ -73,7 +73,7 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
           ? (userSnap.data()?.activeGroupId as string | null)
           : null;
 
-        const resolvedId = storedGroupId ?? DEFAULT_GROUP_ID;
+        const resolvedId = storedGroupId ?? null;
 
         if (!cancelled) {
           setActiveGroupId(resolvedId);
@@ -81,8 +81,8 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
       } catch (err) {
         if (!cancelled) {
           console.error("[useActiveGroup] Erro ao resolver groupId:", err);
-          // Fallback seguro para o grupo inicial
-          setActiveGroupId(DEFAULT_GROUP_ID);
+          // Zero fallback para usuários novos sem grupo ativo
+          setActiveGroupId(null);
         }
       }
     };
@@ -93,7 +93,7 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
 
   // ── 2. Ouve o documento do grupo ativo em tempo real ─────────────────────
   useEffect(() => {
-    if (!activeGroupId) return;
+    if (!activeGroupId) { setGroup(null); setMembers([]); setLoading(false); return; }
 
     const unsubGroup = onSnapshot(
       groupDocRef(activeGroupId),
@@ -114,10 +114,17 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
         }
         setLoading(false);
       },
-      (err) => {
-        console.error("[useActiveGroup] Erro ao ouvir grupo:", err.message);
-        setError(err.message);
-        setLoading(false);
+      (err: Error & { code?: string }) => {
+        if (err.code === "permission-denied") {
+          setGroup(null);
+          setMembers([]);
+          setLoading(false);
+          setActiveGroupId(null);
+        } else {
+          console.error("[useActiveGroup] Erro ao ouvir grupo:", err.message);
+          setError(err.message);
+          setLoading(false);
+        }
       }
     );
 
@@ -126,7 +133,7 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
 
   // ── 3. Ouve a subcoleção de membros do grupo ativo ───────────────────────
   useEffect(() => {
-    if (!activeGroupId) return;
+    if (!activeGroupId) { setGroup(null); setMembers([]); setLoading(false); return; }
 
     const unsubMembers = onSnapshot(
       collection(db, "groups", activeGroupId, "members"),
@@ -136,9 +143,16 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
         );
         setMembers(docs);
       },
-      (err) => {
-        console.warn("[useActiveGroup] Erro ao ouvir membros:", err.message);
-        // Não bloqueia o app — membros são exibidos se disponíveis
+      (err: Error & { code?: string }) => {
+        if (err.code === "permission-denied") {
+          setGroup(null);
+          setMembers([]);
+          setLoading(false);
+          setActiveGroupId(null);
+        } else {
+          console.warn("[useActiveGroup] Erro ao ouvir membros:", err.message);
+          // Não bloqueia o app — membros são exibidos se disponíveis
+        }
       }
     );
 
