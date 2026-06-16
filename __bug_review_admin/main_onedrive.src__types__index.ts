@@ -25,10 +25,6 @@ export interface Group {
   /** Legado: aponta para couples/{coupleId} durante Etapa 1.
    *  Será removido na Etapa 1.5 quando as coleções forem migradas. */
   legacyCoupleId?: string;
-  /** 'legacy' = grupo migrado do couples. 'standard' = grupo novo criado na Etapa 3+. */
-  type?: 'legacy' | 'standard';
-  /** IDs de todos os membros (usado para query array-contains) */
-  memberIds?: string[];
 }
 
 /** Estado do contexto de grupo ativo. */
@@ -127,8 +123,6 @@ export interface ExpenseFormData {
   date: string;
   isInstallment?: boolean;
   installmentCount?: number;
-  /** UID real do dono da fatura — preenchido pela UI quando splitType for 100% owner/partner */
-  personalOwnerUserId?: string | null;
 }
 
 export interface SettlementFormData {
@@ -139,8 +133,6 @@ export interface SettlementFormData {
   to: Person;
   date: string;
   pixDestination?: "shared" | "zara_card";
-  /** UID real do dono da fatura — preenchido pela UI quando pixDestination for zara_card */
-  personalOwnerUserId?: string | null;
 }
 
 export type TransactionFormData = ExpenseFormData | SettlementFormData;

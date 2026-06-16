@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    function isGroupMember(groupId) {
+      return isAuthed() &&
+        exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+    }
+
+    function isGroupAdmin(groupId) {
+      return isAuthed() &&
+        get(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Legado: casal
+    match /couples/{coupleId} {
+      allow read, write: if isAuthed();
+      match /transactions/{transactionId} {
+        allow read, write: if isAuthed();
+      }
+      match /fcm_tokens/{tokenId} {
+        allow read, write: if isAuthed();
+      }
+      match /apple_pay_events/{eventId} {
+        allow read, write: if isAuthed();
+      }
+    }
+
+    // Grupos
+    match /groups/{groupId} {
+      allow read: if isGroupMember(groupId);
+      allow create: if isAuthed() && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if isGroupAdmin(groupId);
+
+      match /members/{memberId} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isAuthed() && (
+          memberId == request.auth.uid ||
+          isGroupAdmin(groupId)
+        );
+        allow update: if isGroupAdmin(groupId) || memberId == request.auth.uid;
+        allow delete: if isGroupAdmin(groupId);
+      }
+    }
+
+    // Perfis de usuario
+    match /users/{userId} {
+      allow read, write: if isAuthed() && request.auth.uid == userId;
+    }
+  }
+}

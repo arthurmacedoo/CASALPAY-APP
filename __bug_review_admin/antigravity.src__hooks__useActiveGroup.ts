@@ -16,8 +16,6 @@ import {
   onSnapshot,
   serverTimestamp,
   collection,
-  writeBatch,
-  doc,
 } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import {
@@ -33,7 +31,6 @@ const DEFAULT_GROUP_ID = COUPLE_ID; // "arthur-namorada-2026" durante Etapa 1
 export interface UseActiveGroupReturn extends ActiveGroupState {
   /** Altera o grupo ativo do usuário (salva em users/{uid}.activeGroupId) */
   switchGroup: (groupId: string) => Promise<void>;
-  createGroup: (name: string) => Promise<void>; // NOVO
   activeGroupId: string | null;
 }
 
@@ -46,7 +43,7 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
 
   const currentMember = user ? members.find(m => m.userId === user.uid) || null : null;
   const currentUserRole = currentMember?.role;
-  const isCurrentUserAdmin = Boolean(user && group && group.createdBy === user.uid);
+  const isCurrentUserAdmin = currentUserRole === "admin";
 
   // ── 1. Resolve qual groupId está ativo para este usuário ─────────────────
   useEffect(() => {
@@ -159,57 +156,6 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
     [user]
   );
 
-  const createGroup = useCallback(
-    async (name: string) => {
-      if (!user) return;
-
-      const newGroupRef = doc(collection(db, 'groups'));
-      const memberRef = doc(db, 'groups', newGroupRef.id, 'members', user.uid);
-      const userProfileRef = userDocRef(user.uid);
-
-      // Fallbacks estritos: Firebase rejeita campos undefined/null
-      const displayName: string = user.displayName ?? user.email?.split('@')[0] ?? 'Arthur';
-      const email: string = user.email ?? 'arthur@casalpay.local';
-
-      console.log('[CasalPay] Criando grupo:', { id: newGroupRef.id, name, displayName, email, uid: user.uid });
-
-      const batch = writeBatch(db);
-
-      // 1. Documento do Grupo
-      batch.set(newGroupRef, {
-        name: name.trim(),
-        createdBy: user.uid,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        type: 'standard' as const,
-        memberIds: [user.uid],
-      });
-
-      // 2. Membro criador (sem campos undefined/null)
-      batch.set(memberRef, {
-        userId: user.uid,
-        name: displayName,
-        email: email,
-        role: 'admin' as const,
-        status: 'active' as const,
-        joinedAt: serverTimestamp(),
-      });
-
-      // 3. Perfil do usuário: atualiza activeGroupId no mesmo batch (atômico)
-      batch.set(userProfileRef, {
-        activeGroupId: newGroupRef.id,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
-
-      await batch.commit();
-      console.log('[CasalPay] Grupo criado com sucesso:', newGroupRef.id);
-
-      // Switch local imediato (sem nova chamada ao Firestore)
-      setActiveGroupId(newGroupRef.id);
-    },
-    [user]
-  );
-
   return { 
     group, 
     members, 
@@ -217,7 +163,6 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
     error, 
     activeGroupId, 
     switchGroup,
-    createGroup,
     currentMember,
     currentUserRole,
     isCurrentUserAdmin

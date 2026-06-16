@@ -1,0 +1,12 @@
+ M SECURITY.md
+ M api/sync-apple-pay-outbox.ts
+ M api/webhook-apple-pay.ts
+ M src/hooks/useActiveGroup.ts
+ M src/hooks/usePendingTransactions.ts
+ M src/hooks/useTransactions.ts
+ M src/lib/calculations.ts
+ M src/pages/History.tsx
+ M src/pages/Home.tsx
+ M src/types/index.ts
+?? __bug_review_admin/
+?? src/lib/transactionVisibility.ts

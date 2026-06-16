@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTransactions } from "../hooks/useTransactions";
 import type {
@@ -13,6 +13,8 @@ import { getTodayDateString, getCurrentMonthKey, formatBRL } from "../lib/format
 import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
 import { OWNER_NAME, PARTNER_NAME, OWNER_EMOJI, PARTNER_EMOJI } from "../constants/couple";
+import { useGroupContext } from "../contexts/GroupContext";
+import { getLegacyRoleForMember } from "../lib/transactionVisibility";
 
 const initialExpenseData: ExpenseFormData = {
   type: "expense",
@@ -23,6 +25,7 @@ const initialExpenseData: ExpenseFormData = {
   date: getTodayDateString(),
   isInstallment: false,
   installmentCount: 2,
+  personalOwnerUserId: null,
 };
 
 const initialSettlementData: SettlementFormData = {
@@ -33,7 +36,16 @@ const initialSettlementData: SettlementFormData = {
   to: "owner",
   date: getTodayDateString(),
   pixDestination: "shared",
+  personalOwnerUserId: null,
 };
+
+/** Retorna true quando a divisão exige um dono pessoal explícito */
+function isPersonalSplit(form: TransactionFormData): boolean {
+  if (form.type === "expense") {
+    return form.splitType === "100% owner" || form.splitType === "100% partner";
+  }
+  return form.pixDestination === "zara_card";
+}
 
 export const AddExpensePage: React.FC = () => {
   const navigate = useNavigate();
@@ -46,11 +58,15 @@ export const AddExpensePage: React.FC = () => {
     : getCurrentMonthKey();
 
   const { addTransaction, updateTransaction } = useTransactions(monthKey);
+  const { members } = useGroupContext();
+
+  // Membros legados por papel (baseado no nome, não no role do Firestore)
+  const ownerMember = useMemo(() => members.find(m => getLegacyRoleForMember(m) === "owner") ?? null, [members]);
+  const partnerMember = useMemo(() => members.find(m => getLegacyRoleForMember(m) === "partner") ?? null, [members]);
 
   const [form, setForm] = useState<TransactionFormData>(
     editTransaction
       ? (() => {
-          // Usa o valor total original para não confundir quem edita uma parcela
           const displayAmount = editTransaction.type === "expense" && editTransaction.originalAmount
             ? editTransaction.originalAmount
             : editTransaction.amount;
@@ -60,12 +76,13 @@ export const AddExpensePage: React.FC = () => {
             amount: (displayAmount / 100).toFixed(2).replace(".", ","),
             isInstallment,
             installmentCount: isInstallment ? (editTransaction.installmentCount ?? 2) : 2,
+            personalOwnerUserId: editTransaction.personalOwnerUserId ?? null,
           } as TransactionFormData;
         })()
       : initialExpenseData
   );
 
-  const [errors, setErrors] = useState<Partial<Record<keyof TransactionFormData, string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<keyof TransactionFormData | "personalOwnerUserId", string>>>({});
   const [saving, setSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
@@ -76,8 +93,32 @@ export const AddExpensePage: React.FC = () => {
     }
   }, [location.key, isEditing]);
 
+  // Auto-seleciona o dono quando a divisão muda para pessoal
+  useEffect(() => {
+    if (form.type !== "expense") return;
+    if (form.splitType === "100% owner") {
+      setForm(f => ({ ...f, personalOwnerUserId: ownerMember?.userId ?? null }));
+    } else if (form.splitType === "100% partner") {
+      setForm(f => ({ ...f, personalOwnerUserId: partnerMember?.userId ?? null }));
+    } else {
+      setForm(f => ({ ...f, personalOwnerUserId: null }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.type === "expense" ? form.splitType : undefined, ownerMember?.userId, partnerMember?.userId]);
+
+  // Auto-seleciona Zara quando pixDestination é zara_card
+  useEffect(() => {
+    if (form.type !== "settlement") return;
+    if (form.pixDestination === "zara_card") {
+      setForm(f => ({ ...f, personalOwnerUserId: partnerMember?.userId ?? null }));
+    } else {
+      setForm(f => ({ ...f, personalOwnerUserId: null }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.type === "settlement" ? form.pixDestination : undefined, partnerMember?.userId]);
+
   const validate = (): boolean => {
-    const newErrors: Partial<Record<keyof TransactionFormData, string>> = {};
+    const newErrors: Partial<Record<keyof TransactionFormData | "personalOwnerUserId", string>> = {};
 
     if (!form.description.trim()) {
       newErrors.description = "Descreva o lançamento";
@@ -96,6 +137,11 @@ export const AddExpensePage: React.FC = () => {
       newErrors.type = "Remetente e destinatário não podem ser iguais";
     }
 
+    // Bloqueio: gasto pessoal sem dono definido
+    if (isPersonalSplit(form) && !form.personalOwnerUserId) {
+      newErrors.personalOwnerUserId = "Selecione a quem pertence este gasto pessoal";
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -108,11 +154,17 @@ export const AddExpensePage: React.FC = () => {
     setSaving(true);
 
     try {
-      let submitData = { ...form };
+    let submitData = { ...form };
 
       // Regra de negócio: parcelado sempre é 100% de quem pagou
       if (submitData.type === "expense" && submitData.isInstallment) {
         submitData.splitType = submitData.paidBy === "owner" ? "100% owner" : "100% partner";
+        // Infere dono para parcelas se a UI não forneceu
+        if (!submitData.personalOwnerUserId) {
+          submitData.personalOwnerUserId = submitData.paidBy === "owner"
+            ? ownerMember?.userId ?? null
+            : partnerMember?.userId ?? null;
+        }
       }
 
       if (isEditing && editTransaction) {
@@ -156,6 +208,7 @@ export const AddExpensePage: React.FC = () => {
   };
 
   const isExpense = form.type === "expense";
+  const showOwnerPicker = isPersonalSplit(form);
 
   return (
     <main className="flex-1 overflow-y-auto pb-28">
@@ -366,7 +419,7 @@ export const AddExpensePage: React.FC = () => {
                         key={type}
                         type="button"
                         onClick={() => setForm((f) => f.type === "expense" ? { ...f, splitType: type } : f)}
-                        className={`chip text-xs ${isSelected ? colorClass : ""}`}
+                        className={`chip text-xs active:scale-95 transition-all ${isSelected ? colorClass : ""}`}
                       >
                         {labels[type]}
                       </button>
@@ -425,6 +478,39 @@ export const AddExpensePage: React.FC = () => {
               </div>
             </div>
           </>
+        )}
+
+        {/* ── SELETOR DE DONO (aparece quando é um gasto pessoal) ── */}
+        {showOwnerPicker && (
+          <div className="animate-fade-in-up flex flex-col gap-2 bg-bg-elevated border border-border rounded-xl p-4">
+            <p className="text-sm font-semibold text-text-primary">
+              A quem pertence este gasto pessoal?
+            </p>
+            <p className="text-xs text-text-muted mb-1">
+              Vai aparecer só na fatura do membro selecionado.
+            </p>
+            <div className="flex gap-2 flex-wrap">
+              {members.map((m) => {
+                const legacyRole = getLegacyRoleForMember(m);
+                const chipClass = legacyRole === "owner" ? "chip-selected-blue" : "chip-selected-pink";
+                const emoji = legacyRole === "owner" ? OWNER_EMOJI : PARTNER_EMOJI;
+                const isSelected = form.personalOwnerUserId === m.userId;
+                return (
+                  <button
+                    key={m.userId}
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, personalOwnerUserId: m.userId }))}
+                    className={`chip active:scale-95 transition-all ${isSelected ? chipClass : ""}`}
+                  >
+                    {emoji} {m.name}
+                  </button>
+                );
+              })}
+            </div>
+            {errors.personalOwnerUserId && (
+              <p className="text-accent-red text-xs mt-1">{errors.personalOwnerUserId}</p>
+            )}
+          </div>
         )}
 
         {/* Data */}

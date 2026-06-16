@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useTransactions } from "../hooks/useTransactions";
 import { deleteDoc } from "firebase/firestore";
-import { transactionDocRef, COUPLE_ID } from "../lib/firebase";
+import { transactionDocRef } from "../lib/firebase";
 import { usePendingTransactions } from "../hooks/usePendingTransactions";
 import { calculateBalance, generatePixSummary } from "../lib/calculations";
 import { getCurrentMonthKey, formatMonthLabel, formatBRL, formatDateBR } from "../lib/formatters";
@@ -404,12 +404,10 @@ export const HomePage: React.FC = () => {
 
           /* ── Abas shared/personal ─────────────────────────────────────────────── */
           ) : recentTransactions.length === 0 ? (
-            <div className="bg-bg-card border border-border rounded-3xl flex flex-col items-center py-12 gap-3 text-center px-6">
+            <div className="card flex flex-col items-center py-10 gap-3 text-center">
               <span className="text-4xl">{viewMode === "shared" ? "🛍️" : "💳"}</span>
-              <p className="text-text-primary font-semibold">
-                {group?.type === 'standard'
-                  ? 'Nenhuma transação financeira registrada neste grupo ainda.'
-                  : viewMode === "shared"
+              <p className="text-text-secondary font-medium">
+                {viewMode === "shared"
                   ? "Nenhuma despesa ainda"
                   : "Nenhuma despesa pessoal lançada"}
               </p>
@@ -445,7 +443,7 @@ export const HomePage: React.FC = () => {
           </Button>
         )}
 
-        {group?.id === COUPLE_ID && <AnniversaryCountdown />}
+        <AnniversaryCountdown />
       </div>
     </main>
   );
