@@ -18,6 +18,7 @@ import {
   collection,
   writeBatch,
   doc,
+  arrayUnion,
 } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import {
@@ -34,6 +35,9 @@ export interface UseActiveGroupReturn extends ActiveGroupState {
   /** Altera o grupo ativo do usuário (salva em users/{uid}.activeGroupId) */
   switchGroup: (groupId: string) => Promise<void>;
   createGroup: (name: string) => Promise<void>; // NOVO
+  updateGroup: (newName: string) => Promise<void>;
+  deleteGroup: () => Promise<void>;
+  joinGroup: (groupId: string) => Promise<void>;
   activeGroupId: string | null;
 }
 
@@ -210,6 +214,92 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
     [user]
   );
 
+  const updateGroup = useCallback(async (newName: string) => {
+    if (!user || !activeGroupId || !isCurrentUserAdmin || activeGroupId === COUPLE_ID) return;
+    try {
+      await setDoc(groupDocRef(activeGroupId), { 
+        name: newName.trim(), 
+        updatedAt: serverTimestamp() 
+      }, { merge: true });
+    } catch (err) {
+      console.error("[CasalPay] Erro ao atualizar grupo:", err);
+      throw err;
+    }
+  }, [user, activeGroupId, isCurrentUserAdmin]);
+
+  const deleteGroup = useCallback(async () => {
+    if (!user || !activeGroupId || !isCurrentUserAdmin || activeGroupId === COUPLE_ID) return;
+    try {
+      const batch = writeBatch(db);
+      
+      // 1. Exclui o documento do grupo
+      batch.delete(groupDocRef(activeGroupId));
+      
+      // 2. Exclui o membro do criador para limpar a subcoleção
+      batch.delete(doc(db, 'groups', activeGroupId, 'members', user.uid));
+      
+      // 3. Reseta o usuário para o grupo legado
+      batch.set(userDocRef(user.uid), { 
+        activeGroupId: COUPLE_ID, 
+        updatedAt: serverTimestamp() 
+      }, { merge: true });
+
+      await batch.commit();
+      
+      // Atualiza o estado local imediatamente
+      setActiveGroupId(COUPLE_ID);
+    } catch (err) {
+      console.error("[CasalPay] Erro ao excluir grupo:", err);
+      throw err;
+    }
+  }, [user, activeGroupId, isCurrentUserAdmin]);
+
+  const joinGroup = useCallback(async (inviteCode: string) => {
+    if (!user) return;
+    const groupId = inviteCode.trim();
+    if (!groupId) throw new Error("Código de convite inválido.");
+
+    const groupRef = doc(db, 'groups', groupId);
+    const memberRef = doc(db, 'groups', groupId, 'members', user.uid);
+    const userProfileRef = userDocRef(user.uid);
+
+    // Valida se o grupo existe antes de tentar entrar
+    const groupSnap = await getDoc(groupRef);
+    if (!groupSnap.exists()) {
+      throw new Error("Grupo não encontrado. Verifique o código.");
+    }
+
+    const displayName = user.displayName ?? user.email?.split('@')[0] ?? 'Convidado';
+    const email = user.email ?? '';
+
+    const batch = writeBatch(db);
+
+    // 1. Adiciona o usuário na array memberIds do grupo
+    batch.update(groupRef, {
+      memberIds: arrayUnion(user.uid),
+      updatedAt: serverTimestamp()
+    });
+
+    // 2. Cria o documento do membro
+    batch.set(memberRef, {
+      userId: user.uid,
+      name: displayName,
+      email: email,
+      role: 'member', // Convidado entra como member padrão
+      status: 'active',
+      joinedAt: serverTimestamp(),
+    });
+
+    // 3. Atualiza o grupo ativo do usuário
+    batch.set(userProfileRef, {
+      activeGroupId: groupId,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+
+    await batch.commit();
+    setActiveGroupId(groupId);
+  }, [user]);
+
   return { 
     group, 
     members, 
@@ -218,6 +308,9 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
     activeGroupId, 
     switchGroup,
     createGroup,
+    updateGroup,
+    deleteGroup,
+    joinGroup,
     currentMember,
     currentUserRole,
     isCurrentUserAdmin

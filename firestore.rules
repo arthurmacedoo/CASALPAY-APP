@@ -34,7 +34,14 @@ service cloud.firestore {
     match /groups/{groupId} {
       allow read: if isGroupMember(groupId);
       allow create: if isAuthed() && request.resource.data.createdBy == request.auth.uid;
-      allow update, delete: if isGroupAdmin(groupId);
+      allow delete: if isGroupAdmin(groupId);
+      // Atualização por admins, OU por um usuário entrando no grupo (adicionando apenas seu UID ao array)
+      allow update: if isGroupAdmin(groupId) || (
+        isAuthed() &&
+        request.resource.data.memberIds.hasAll(resource.data.memberIds) &&
+        request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1 &&
+        (request.auth.uid in request.resource.data.memberIds)
+      );
 
       match /members/{memberId} {
         allow read: if isGroupMember(groupId);

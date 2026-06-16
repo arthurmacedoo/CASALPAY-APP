@@ -11,6 +11,7 @@ import { BalanceCard } from "../components/BalanceCard";
 import { TransactionItem } from "../components/TransactionItem";
 import { AnniversaryCountdown } from "../components/AnniversaryCountdown";
 import { GroupSwitcherSheet } from "../components/GroupSwitcherSheet";
+import { GroupSettingsSheet } from "../components/GroupSettingsSheet";
 import { Button } from "../components/ui/Button";
 import type { Transaction } from "../types";
 import { PARTNER_NAME, OWNER_NAME } from "../constants/couple";
@@ -117,6 +118,7 @@ export const HomePage: React.FC = () => {
 
   const [copied, setCopied] = useState(false);
   const [isGroupSheetOpen, setIsGroupSheetOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const stored = sessionStorage.getItem("casalpay_viewMode");
     return (stored === "shared" || stored === "personal" || stored === "pending") 
@@ -216,34 +218,76 @@ export const HomePage: React.FC = () => {
   // Removemos o número do label de texto para usar apenas o badge visual
   const pendingLabel = "Pendentes";
 
+  // Se o usuário logou mas não pertence ao grupo atual (ex: usuário novo recém-registrado)
+  if (!currentMember) {
+    return (
+      <main className="flex-1 overflow-y-auto pb-24 flex flex-col items-center justify-center px-6">
+        <div className="w-20 h-20 rounded-full bg-accent-blue/10 flex items-center justify-center mb-6">
+          <span className="text-4xl">👋</span>
+        </div>
+        <h2 className="text-2xl font-bold text-text-primary text-center mb-2">Bem-vindo(a)!</h2>
+        <p className="text-text-secondary text-center mb-8 max-w-[280px]">
+          Você ainda não faz parte de nenhum grupo financeiro. Crie o seu grupo ou entre em um usando o código de convite.
+        </p>
+        <button 
+          onClick={() => setIsGroupSheetOpen(true)}
+          className="px-6 py-3.5 bg-accent-blue text-white font-semibold rounded-xl shadow-glow-blue hover:bg-accent-blue/90 transition-all active:scale-[0.98]"
+        >
+          Configurar Meu Grupo
+        </button>
+
+        {/* Mantemos os modais vitais injetados */}
+        <GroupSwitcherSheet
+          isOpen={isGroupSheetOpen}
+          onClose={() => setIsGroupSheetOpen(false)}
+        />
+        <GroupSettingsSheet
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+        />
+      </main>
+    );
+  }
+
   return (
     <main className="flex-1 overflow-y-auto pb-24">
       {/* Header */}
-      <header className="px-6 pt-12 pb-4">
-        {/* Grupo ativo com botão de troca */}
-        <button
-          id="btn-group-switcher"
-          onClick={() => setIsGroupSheetOpen(true)}
-          className="flex items-center gap-2 group mb-0.5 -ml-0.5 px-1 py-0.5 rounded-xl transition-colors hover:bg-white/5 active:bg-white/10"
-          aria-label="Trocar grupo ativo"
-        >
-          <h1 className="text-2xl font-bold tracking-tight text-text-primary">
-            {group?.name ?? `${OWNER_NAME} e ${PARTNER_NAME}`}
-          </h1>
-          {/* Chevron animado */}
-          <svg
-            className="w-5 h-5 text-text-muted mt-0.5 transition-transform duration-200 group-hover:translate-y-0.5"
-            viewBox="0 0 20 20"
-            fill="currentColor"
+      <header className="px-6 pt-12 pb-4 flex items-center justify-between">
+        <div>
+          {/* Grupo ativo com botão de troca */}
+          <button
+            id="btn-group-switcher"
+            onClick={() => setIsGroupSheetOpen(true)}
+            className="flex items-center gap-2 group mb-0.5 -ml-0.5 px-1 py-0.5 rounded-xl transition-colors hover:bg-white/5 active:bg-white/10"
+            aria-label="Trocar grupo ativo"
           >
-            <path
-              fillRule="evenodd"
-              d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z"
-              clipRule="evenodd"
-            />
-          </svg>
-        </button>
-        <p className="text-text-muted text-sm font-medium">Divisão de despesas</p>
+            <h1 className="text-2xl font-bold tracking-tight text-text-primary">
+              {group?.name ?? `${OWNER_NAME} e ${PARTNER_NAME}`}
+            </h1>
+            {/* Chevron animado */}
+            <svg
+              className="w-5 h-5 text-text-muted mt-0.5 transition-transform duration-200 group-hover:translate-y-0.5"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+          <p className="text-text-muted text-sm font-medium">Divisão de despesas</p>
+        </div>
+
+        {group && (
+          <button onClick={() => setIsSettingsOpen(true)} className="p-2 rounded-full bg-bg-elevated hover:bg-white/5 transition-colors border border-border">
+            <svg className="w-5 h-5 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+        )}
       </header>
 
       {/* Bottom Sheet de troca de grupo */}
@@ -447,6 +491,8 @@ export const HomePage: React.FC = () => {
 
         {group?.id === COUPLE_ID && <AnniversaryCountdown />}
       </div>
+      
+      <GroupSettingsSheet isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </main>
   );
 };

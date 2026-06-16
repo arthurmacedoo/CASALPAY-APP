@@ -3,10 +3,15 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
+  createUserWithEmailAndPassword,
+  updateProfile,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence
 } from "firebase/auth";
 import type { User } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db, COUPLE_ID } from "../lib/firebase";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { auth, db } from "../lib/firebase";
 
 interface UseAuthReturn {
   user: User | null;
@@ -14,7 +19,8 @@ interface UseAuthReturn {
   error: string | null;
   isAuthorized: boolean;
   unauthorizedReason: string | null;
-  login: (username: string, pass: string) => Promise<void>;
+  login: (email: string, pass: string, remember?: boolean) => Promise<void>;
+  register: (name: string, email: string, pass: string, remember?: boolean) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -41,30 +47,7 @@ export function useAuth(): UseAuthReturn {
       setError(null);
 
       if (currentUser) {
-        try {
-          const coupleDocRef = doc(db, "couples", COUPLE_ID);
-          const coupleDoc = await getDoc(coupleDocRef);
-          
-          if (coupleDoc.exists()) {
-            const data = coupleDoc.data();
-            const members = data?.members ?? {};
-            const isMember = members[currentUser.uid] === true;
-
-            if (isMember) {
-              setIsAuthorized(true);
-            } else {
-              setIsAuthorized(false);
-              setUnauthorizedReason(`Seu UID (${currentUser.uid}) não foi encontrado na lista de members ou não está marcado como true.`);
-            }
-          } else {
-            setIsAuthorized(false);
-            setUnauthorizedReason(`O documento do casal (/couples/${COUPLE_ID}) não foi encontrado no banco de dados.`);
-          }
-        } catch (firestoreError: any) {
-          console.error("Erro ao ler o Firestore:", firestoreError);
-          setIsAuthorized(false);
-          setUnauthorizedReason(`Falha de permissão ao ler o Firestore. Erro: ${firestoreError.message}`);
-        }
+        setIsAuthorized(true);
       } else {
         setIsAuthorized(false);
       }
@@ -78,21 +61,47 @@ export function useAuth(): UseAuthReturn {
     };
   }, []);
 
-  const login = async (username: string, pass: string) => {
+  const login = async (email: string, pass: string, remember: boolean = true) => {
     setError(null);
     setUnauthorizedReason(null);
     setLoading(true);
-
     try {
-      const emailTecnico = `${username.toLowerCase().trim()}@casalpay.local`;
-      await signInWithEmailAndPassword(auth, emailTecnico, pass);
+      await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
+      await signInWithEmailAndPassword(auth, email, pass);
     } catch (err: any) {
-      console.error("Erro no login:", err);
-      if (err.code === "auth/invalid-credential" || err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
-        setError("Usuário ou senha incorretos.");
-      } else {
-        setError(`Falha ao logar: ${err.message}`);
-      }
+      console.error("[useAuth] Erro no login:", err);
+      setError(err.message || 'Erro ao fazer login. Verifique as credenciais.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const register = async (name: string, email: string, pass: string, remember: boolean = true) => {
+    setError(null);
+    setUnauthorizedReason(null);
+    setLoading(true);
+    try {
+      await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
+      const userCred = await createUserWithEmailAndPassword(auth, email, pass);
+      
+      // Atualiza o displayName no Auth
+      await updateProfile(userCred.user, { displayName: name.trim() });
+      
+      // Cria o perfil inicial zerado no Firestore (activeGroupId null até ele criar/entrar em um)
+      await setDoc(doc(db, 'users', userCred.user.uid), {
+        userId: userCred.user.uid,
+        name: name.trim(),
+        email: email.trim(),
+        activeGroupId: null,
+        defaultGroupId: null,
+        updatedAt: serverTimestamp()
+      });
+      
+    } catch (err: any) {
+      console.error("[useAuth] Erro no cadastro:", err);
+      setError(err.message || 'Erro ao criar conta.');
+      await signOut(auth);
+    } finally {
       setLoading(false);
     }
   };
@@ -104,5 +113,5 @@ export function useAuth(): UseAuthReturn {
     setUnauthorizedReason(null);
   };
 
-  return { user, loading, error, isAuthorized, unauthorizedReason, login, logout };
+  return { user, loading, error, isAuthorized, unauthorizedReason, login, register, logout };
 }

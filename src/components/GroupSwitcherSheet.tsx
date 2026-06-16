@@ -31,15 +31,18 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { group, members, loading: activeLoading, createGroup, switchGroup, activeGroupId } = useGroupContext();
+  const { group, members, loading: activeLoading, switchGroup, createGroup, joinGroup } = useGroupContext();
   const { user } = useAuth();
   const { groups: userGroups, loading: groupsLoading } = useUserGroups(user);
   const sheetRef = useRef<HTMLDivElement>(null);
 
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [newGroupName, setNewGroupName] = useState('');
+  const [showJoinForm, setShowJoinForm] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState('');
+  const [joining, setJoining] = useState(false);
+  const [createError, setCreateError] = useState("");
 
   const handleCreateGroup = async () => {
     const name = newGroupName.trim();
@@ -49,7 +52,10 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
     try {
       await createGroup(name);
       setShowCreateForm(false);
-      setNewGroupName('');
+      setShowJoinForm(false);
+      setNewGroupName("");
+      setInviteCode("");
+      setCreateError("");
       onClose();
     } catch (e) {
       console.error("[CasalPay CRÍTICO] Falha ao criar grupo no Firestore:", e);
@@ -132,7 +138,7 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
         ) : (
           <div className="flex flex-col gap-2">
             {userGroups.map((g) => {
-              const isActive = g.id === activeGroupId;
+              const isActive = g.id === group?.id;
               const gName = g.name ?? "Grupo sem nome";
               const gInitial = gName.charAt(0).toUpperCase();
 
@@ -213,9 +219,6 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
                         {m.userId === group?.createdBy ? "Admin 👑" : "Membro"}
                       </p>
                     </div>
-                    {m.status === "active" && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-accent-green shrink-0" />
-                    )}
                   </div>
                 );
               })}
@@ -223,19 +226,22 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
           </div>
         )}
 
-        {/* ── Criar novo grupo ──────────────────────────────────────────────────────── */}
+        {/* ── Ações: Criar ou Entrar ──────────────────────────────────────────────────────── */}
         <div className="mt-5 border-t border-border pt-4 flex flex-col gap-2">
-          {!showCreateForm ? (
-            <button
-              onClick={() => setShowCreateForm(true)}
-              className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-bg-elevated transition-colors"
-            >
-              <div className="w-8 h-8 rounded-xl bg-bg-elevated border border-dashed border-accent-blue/50 flex items-center justify-center text-base text-accent-blue">
-                ＋
-              </div>
-              <span className="text-sm font-medium text-text-secondary">Criar novo grupo</span>
-            </button>
-          ) : (
+          {!showCreateForm && !showJoinForm && (
+            <>
+              <button onClick={() => setShowCreateForm(true)} className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-bg-elevated transition-colors">
+                <div className="w-8 h-8 rounded-xl bg-bg-elevated border border-dashed border-accent-blue/50 flex items-center justify-center text-base text-accent-blue">＋</div>
+                <span className="text-sm font-medium text-text-secondary">Criar novo grupo</span>
+              </button>
+              <button onClick={() => setShowJoinForm(true)} className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-bg-elevated transition-colors">
+                <div className="w-8 h-8 rounded-xl bg-bg-elevated border border-dashed border-accent-pink/50 flex items-center justify-center text-base text-accent-pink">🔗</div>
+                <span className="text-sm font-medium text-text-secondary">Entrar com código</span>
+              </button>
+            </>
+          )}
+
+          {showCreateForm && (
             <div className="animate-fade-in-up flex flex-col gap-3 bg-bg-elevated rounded-2xl p-4 border border-border">
               <p className="text-sm font-semibold text-text-primary">Nome do novo grupo</p>
               <input
@@ -251,17 +257,49 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
               <div className="flex gap-2">
                 <button
                   onClick={handleCreateGroup}
-                  disabled={creating}
-                  className="flex-1 py-2.5 rounded-xl bg-accent-pink text-white text-sm font-semibold hover:bg-accent-pink/90 transition-colors disabled:opacity-50"
+                  disabled={creating || !newGroupName.trim()}
+                  className="flex-1 py-2.5 rounded-xl bg-accent-blue text-white text-sm font-semibold hover:bg-accent-blue/90 transition-colors disabled:opacity-50"
                 >
                   {creating ? 'Criando...' : 'Criar grupo'}
                 </button>
+                <button onClick={() => { setShowCreateForm(false); setNewGroupName(''); setCreateError(''); }} className="px-4 py-2.5 rounded-xl bg-bg-card border border-border text-sm text-text-muted hover:text-text-primary transition-colors">Cancelar</button>
+              </div>
+            </div>
+          )}
+
+          {showJoinForm && (
+            <div className="animate-fade-in-up flex flex-col gap-3 bg-bg-elevated rounded-2xl p-4 border border-border">
+              <p className="text-sm font-semibold text-text-primary">Código de convite</p>
+              <input
+                autoFocus
+                type="text"
+                placeholder="Cole o ID do grupo aqui"
+                value={inviteCode}
+                onChange={(e) => { setInviteCode(e.target.value); setCreateError(''); }}
+                className="w-full bg-bg-card border border-border rounded-xl px-4 py-3 text-sm text-text-primary font-mono placeholder:text-text-muted focus:outline-none focus:border-accent-pink transition-colors"
+              />
+              {createError && <p className="text-xs text-red-400">{createError}</p>}
+              <div className="flex gap-2">
                 <button
-                  onClick={() => { setShowCreateForm(false); setNewGroupName(''); setCreateError(''); }}
-                  className="px-4 py-2.5 rounded-xl bg-bg-card border border-border text-sm text-text-muted hover:text-text-primary transition-colors"
+                  onClick={async () => {
+                    setJoining(true);
+                    try {
+                      await joinGroup(inviteCode);
+                      setShowJoinForm(false);
+                      setInviteCode('');
+                      onClose();
+                    } catch (err: any) {
+                      setCreateError(err.message || 'Erro ao entrar no grupo.');
+                    } finally {
+                      setJoining(false);
+                    }
+                  }}
+                  disabled={joining || !inviteCode.trim()}
+                  className="flex-1 py-2.5 rounded-xl bg-accent-pink text-white text-sm font-semibold hover:bg-accent-pink/90 transition-colors disabled:opacity-50"
                 >
-                  Cancelar
+                  {joining ? 'Entrando...' : 'Entrar no grupo'}
                 </button>
+                <button onClick={() => { setShowJoinForm(false); setInviteCode(''); setCreateError(''); }} className="px-4 py-2.5 rounded-xl bg-bg-card border border-border text-sm text-text-muted hover:text-text-primary transition-colors">Cancelar</button>
               </div>
             </div>
           )}

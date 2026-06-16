@@ -1,114 +1,89 @@
 import React, { useState } from "react";
 import { useAuth } from "../hooks/useAuth";
-import { Button } from "../components/ui/Button";
-import { Input } from "../components/ui/Input";
 
 export const LoginPage: React.FC = () => {
-  const { login, logout, loading, error, user, isAuthorized, unauthorizedReason } = useAuth();
-  const [copied, setCopied] = useState(false);
-  const [username, setUsername] = useState("");
+  const { login, register, error, loading } = useAuth();
+  const [isRegister, setIsRegister] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
 
-  const handleCopyUid = () => {
-    if (user?.uid) {
-      navigator.clipboard.writeText(user.uid);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleLogin = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (username.trim() && password.trim()) {
-      login(username, password);
+    if (!email.trim() || !password.trim()) return;
+    
+    if (isRegister) {
+      if (!name.trim()) return;
+      register(name, email, password, remember);
+    } else {
+      login(email, password, remember);
     }
   };
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-bg-card pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
       <div className="w-full max-w-[360px] mx-auto flex flex-col items-center gap-6">
-        <div className="text-5xl">👩‍❤️‍👨</div>
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-text-primary mb-2 tracking-tight">
-            CasalPay
-          </h1>
-          <p className="text-sm text-text-muted">
-            O aplicativo de divisão de despesas do casal.
-          </p>
+        <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-accent-blue/20 to-accent-purple/20 border border-border flex items-center justify-center mb-2 shadow-glow-blue">
+          <svg className="w-8 h-8 text-accent-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+          </svg>
+        </div>
+        <div className="text-center mb-4">
+          <h1 className="text-3xl font-bold text-text-primary mb-2 tracking-tight">CasalPay</h1>
+          <p className="text-sm text-text-muted">Gestão financeira transparente.</p>
         </div>
 
-        {/* Mensagem de Erro Genérico ou Falha no Login */}
-        {error && (
-          <div className="w-full p-4 rounded-xl bg-accent-red/10 border border-accent-red/30 text-accent-red text-sm text-center">
-            {error}
-          </div>
-        )}
+        {/* Toggle Mode */}
+        <div className="relative flex bg-bg-elevated p-1 rounded-xl w-full border border-border">
+          {/* Fundo dinâmico deslizando */}
+          <div 
+            className={`absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-lg shadow-sm border transition-all duration-300 ease-out ${!isRegister ? 'bg-accent-blue/10 border-accent-blue/20' : 'bg-accent-purple/10 border-accent-purple/20'}`}
+            style={{ transform: isRegister ? 'translateX(100%)' : 'translateX(0)' }}
+          />
+          <button 
+            type="button"
+            onClick={() => { setIsRegister(false); /*setError(null);*/ }}
+            className={`relative z-10 flex-1 py-2 text-sm font-semibold rounded-lg transition-colors duration-300 ${!isRegister ? 'text-accent-blue' : 'text-text-muted hover:text-text-secondary'}`}
+          >
+            Entrar
+          </button>
+          <button 
+            type="button"
+            onClick={() => { setIsRegister(true); /*setError(null);*/ }}
+            className={`relative z-10 flex-1 py-2 text-sm font-semibold rounded-lg transition-colors duration-300 ${isRegister ? 'text-accent-purple' : 'text-text-muted hover:text-text-secondary'}`}
+          >
+            Criar Conta
+          </button>
+        </div>
 
-        {/* Usuário logado, mas bloqueado pelo Firestore (UID não liberado) */}
-        {user && !isAuthorized && !loading && (
-          <div className="w-full flex flex-col items-center gap-4 animate-fade-in">
-            <div className="w-full p-5 rounded-xl bg-accent-blue/10 border border-accent-blue/30 flex flex-col items-center text-center">
-              <h2 className="text-accent-blue font-semibold mb-2">Autenticado, mas bloqueado no app.</h2>
-              <p className="text-sm text-text-secondary mb-4">
-                <strong>Motivo exato:</strong><br />
-                <span className="font-mono text-xs opacity-80 mt-1 block bg-black/20 p-2 rounded">{unauthorizedReason}</span>
-              </p>
-              
-              <p className="text-xs text-text-muted mb-2">O seu <strong>UID</strong> é:</p>
-              <code className="text-xs break-all bg-bg-card p-2 rounded block mb-3 font-mono text-text-primary w-full">
-                {user.uid}
-              </code>
-              <Button onClick={handleCopyUid} variant="secondary" fullWidth>
-                {copied ? "UID Copiado! ✓" : "Copiar meu UID"}
-              </Button>
+        <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
+          {error && <div className="p-3 rounded-xl bg-accent-red/10 text-accent-red text-sm text-center font-medium border border-accent-red/20">{error}</div>}
+
+          {isRegister && (
+            <input type="text" placeholder="Seu nome ou apelido" value={name} onChange={(e) => setName(e.target.value)} required className="input-base" disabled={loading} />
+          )}
+          
+          <input type="email" placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} required className="input-base" disabled={loading} />
+          
+          <input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)} required className="input-base" disabled={loading} />
+
+          <label className="flex items-center gap-3 cursor-pointer mt-1 pl-1">
+            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors duration-300 ${remember ? (!isRegister ? 'bg-accent-blue border-accent-blue' : 'bg-accent-purple border-accent-purple') : 'bg-transparent border-border'}`}>
+              {remember && <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
             </div>
-            
-            <button 
-              onClick={logout} 
-              className="text-text-muted text-sm underline mt-2"
-            >
-              Sair / Tentar com outra conta
-            </button>
-          </div>
-        )}
+            <span className="text-sm font-medium text-text-secondary select-none">Manter conectado</span>
+            <input type="checkbox" className="hidden" checked={remember} onChange={(e) => setRemember(e.target.checked)} disabled={loading} />
+          </label>
 
-        {/* Usuário deslogado completamente - Formulário Usuário e Senha */}
-        {!user && !loading && (
-          <form onSubmit={handleLogin} className="w-full flex flex-col gap-4 box-border">
-            <Input
-              type="text"
-              label="Usuário"
-              placeholder="Digite seu usuário"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-            />
-            <Input
-              type="password"
-              label="Senha"
-              placeholder="Digite sua senha"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-            
-            <Button
-              type="submit"
-              disabled={loading || !username.trim() || !password.trim()}
-              fullWidth
-            >
-              Entrar
-            </Button>
-          </form>
-        )}
-
-        {/* Estado de loading */}
-        {loading && (
-          <div className="mt-4 text-text-muted text-sm flex items-center gap-2">
-            <span className="animate-spin text-lg">⏳</span>
-            Verificando acesso...
-          </div>
-        )}
+          <button 
+            type="submit" 
+            className={`w-full py-3.5 rounded-xl text-white text-sm font-semibold transition-all duration-300 active:scale-[0.98] mt-2 disabled:opacity-50 ${!isRegister ? 'bg-accent-blue shadow-glow-blue hover:bg-accent-blue/90' : 'bg-accent-purple shadow-[0_0_20px_rgba(168,85,247,0.15)] hover:bg-accent-purple/90'}`} 
+            disabled={loading}
+          >
+            {loading ? (isRegister ? 'Criando conta...' : 'Entrando...') : (isRegister ? 'Criar e Acessar' : 'Acessar CasalPay')}
+          </button>
+        </form>
       </div>
     </div>
   );
