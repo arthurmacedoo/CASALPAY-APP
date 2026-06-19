@@ -68,19 +68,20 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
           } as Transaction;
 
           // ── Runtime Hydration para Retrocompatibilidade ──
-          if (members && members.length > 0) {
-            const adminMember = members.find(m => m.role === "admin");
-            const partnerMember = members.find(m => m.role === "member");
+          if (members && members.length > 0 && group) {
+            const adminMember = members.find(m => m.userId === group.createdBy) || members[0];
+            const partnerMember = members.find(m => m.userId !== adminMember.userId);
             
             if (!partnerMember) {
               return data; // Parada de execução segura
             }
             
-            const splitType = (data.splitType || "").toLowerCase();
-            const pb = (data.paidBy || "").toLowerCase();
-            const pd = (data.pixDestination || "").toLowerCase();
-            const fr = (data.from || "").toLowerCase();
-            const toStr = (data.to || "").toLowerCase();
+            const anyData = data as any;
+            const splitType = (anyData.splitType || "").toLowerCase();
+            const pb = (anyData.paidBy || "").toLowerCase();
+            const pd = (anyData.pixDestination || "").toLowerCase();
+            const fr = (anyData.from || "").toLowerCase();
+            const toStr = (anyData.to || "").toLowerCase();
 
             // Identificação Agressiva de Gastos da Parceira (Zara)
             const isPartnerExpense = 

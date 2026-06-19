@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import type { Transaction, ExpenseTransaction, SettlementTransaction } from "../types";
 import { createPortal } from "react-dom";
 import { formatBRL, formatDateBR, formatSplitType } from "../lib/formatters";
-import { calculateExpenseDebt, calculateSettlementEffect, resolveAdminUid, resolveMemberUid, resolvePaidByUid, resolveSettlementUids } from "../lib/calculations";
+import { calculateExpenseDebt, calculateSettlementEffect, resolveAdminUid } from "../lib/calculations";
 import { useGroupContext } from "../contexts/GroupContext";
 
 interface TransactionItemProps {
