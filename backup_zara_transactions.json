@@ -1,0 +1,665 @@
+[
+  {
+    "id": "02bugfokaW9ktBbU7i7Q",
+    "description": "Formatura",
+    "coupleId": "arthur-namorada-2026",
+    "amount": 28100,
+    "date": "2026-06-06",
+    "monthKey": "2026-06",
+    "type": "expense",
+    "paidBy": "Zara",
+    "splitType": "100% partner",
+    "createdAt": {
+      "_seconds": 1780781224,
+      "_nanoseconds": 313000000
+    },
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "visibility": "shared",
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92",
+    "status": "confirmed"
+  },
+  {
+    "id": "63rvXStli52n2AD2lrRL",
+    "type": "expense",
+    "description": "Graffite Comercio E Se",
+    "amount": 170,
+    "date": "2026-06-11",
+    "monthKey": "2026-06",
+    "coupleId": "arthur-namorada-2026",
+    "paidBy": "partner",
+    "splitType": "100% partner",
+    "visibility": "personal",
+    "source": "webhook-apple-pay",
+    "createdAt": {
+      "_seconds": 1781209365,
+      "_nanoseconds": 589000000
+    },
+    "status": "confirmed",
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92"
+  },
+  {
+    "id": "8Jy75AmAKwU7oQ7JTzEx",
+    "description": "Shopee",
+    "coupleId": "arthur-namorada-2026",
+    "amount": 1699,
+    "date": "2026-06-05",
+    "monthKey": "2026-06",
+    "type": "expense",
+    "paidBy": "Zara",
+    "splitType": "100% partner",
+    "createdAt": {
+      "_seconds": 1780663808,
+      "_nanoseconds": 79000000
+    },
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "visibility": "shared",
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92",
+    "status": "confirmed"
+  },
+  {
+    "id": "GGBEJKtyAenUlxk3aq4l",
+    "date": "2026-06-10",
+    "amount": 12999,
+    "monthKey": "2026-06",
+    "visibility": "personal",
+    "paidBy": "partner",
+    "groupId": "F6pbcZ0kS73oXG2yN8jb",
+    "description": "Havan Cuiaba Bosq Da S",
+    "type": "expense",
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92",
+    "splitType": "100% partner",
+    "coupleId": "arthur-namorada-2026",
+    "createdAt": {
+      "_seconds": 1781125991,
+      "_nanoseconds": 912000000
+    },
+    "originalAmount": 25998,
+    "installmentCount": 2,
+    "currentInstallment": 1,
+    "status": "confirmed",
+    "updatedAt": {
+      "_seconds": 1781125991,
+      "_nanoseconds": 912000000
+    }
+  },
+  {
+    "id": "H8pVV5utMdYOyE7MBNnB",
+    "description": "Camisa Do Brasil",
+    "coupleId": "arthur-namorada-2026",
+    "amount": 4689,
+    "date": "2026-06-18",
+    "monthKey": "2026-06",
+    "type": "expense",
+    "paidBy": "partner",
+    "splitType": "100% partner",
+    "visibility": "personal",
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92",
+    "createdAt": {
+      "_seconds": 1781815660,
+      "_nanoseconds": 5000000
+    },
+    "updatedAt": {
+      "_seconds": 1781815660,
+      "_nanoseconds": 5000000
+    }
+  },
+  {
+    "id": "INCncrCmOZq2cLIgnUeE",
+    "type": "expense",
+    "description": "Cafe E Lanche Pantanal",
+    "amount": 1200,
+    "date": "2026-06-15",
+    "monthKey": "2026-06",
+    "coupleId": "arthur-namorada-2026",
+    "paidBy": "partner",
+    "splitType": "100% partner",
+    "visibility": "personal",
+    "status": "confirmed",
+    "source": "webhook-apple-pay",
+    "clientEventId": null,
+    "deviceUser": null,
+    "capturedAt": null,
+    "createdAt": {
+      "_seconds": 1781555697,
+      "_nanoseconds": 626000000
+    },
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92"
+  },
+  {
+    "id": "PB5UVvrYwY67fIBE4bfl",
+    "description": "Spotify",
+    "coupleId": "arthur-namorada-2026",
+    "amount": 2390,
+    "date": "2026-06-11",
+    "monthKey": "2026-06",
+    "type": "expense",
+    "paidBy": "partner",
+    "splitType": "100% partner",
+    "visibility": "personal",
+    "createdAt": {
+      "_seconds": 1781216152,
+      "_nanoseconds": 57000000
+    },
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92",
+    "status": "confirmed"
+  },
+  {
+    "id": "RhtGmi4vPoSGIEmDcutn",
+    "type": "expense",
+    "description": "We Pink Cuiaba",
+    "amount": 10390,
+    "date": "2026-06-10",
+    "monthKey": "2026-06",
+    "coupleId": "arthur-namorada-2026",
+    "paidBy": "partner",
+    "splitType": "100% partner",
+    "visibility": "personal",
+    "source": "webhook-apple-pay",
+    "createdAt": {
+      "_seconds": 1781121357,
+      "_nanoseconds": 716000000
+    },
+    "status": "confirmed",
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92"
+  },
+  {
+    "id": "Sl6t0BOh8PkoEw8IyI5M",
+    "description": "Mercado",
+    "amount": 8541,
+    "date": "2026-05-31",
+    "monthKey": "2026-05",
+    "coupleId": "arthur-namorada-2026",
+    "type": "expense",
+    "splitType": "100% partner",
+    "createdAt": {
+      "_seconds": 1780274184,
+      "_nanoseconds": 338000000
+    },
+    "paidBy": "Arthur",
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "visibility": "shared",
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92",
+    "status": "confirmed"
+  },
+  {
+    "id": "UYwcEsINdEIn6qiTTTpx",
+    "description": "Pix de acerto",
+    "coupleId": "arthur-namorada-2026",
+    "amount": 1500,
+    "date": "2026-06-14",
+    "monthKey": "2026-06",
+    "type": "settlement",
+    "from": "partner",
+    "to": "owner",
+    "pixDestination": "zara_card",
+    "visibility": "personal",
+    "createdAt": {
+      "_seconds": 1781453263,
+      "_nanoseconds": 686000000
+    },
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "status": "confirmed"
+  },
+  {
+    "id": "VshRXRvyRKh80LskTAcP",
+    "description": "Pix de acerto",
+    "coupleId": "arthur-namorada-2026",
+    "amount": 2200,
+    "date": "2026-06-09",
+    "monthKey": "2026-06",
+    "type": "settlement",
+    "from": "partner",
+    "to": "owner",
+    "pixDestination": "zara_card",
+    "visibility": "personal",
+    "createdAt": {
+      "_seconds": 1781052577,
+      "_nanoseconds": 378000000
+    },
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "status": "confirmed"
+  },
+  {
+    "id": "WBosPRiIiiTSnWzNzzcz",
+    "type": "expense",
+    "description": "Barones",
+    "amount": 12994,
+    "date": "2026-06-14",
+    "monthKey": "2026-06",
+    "coupleId": "arthur-namorada-2026",
+    "paidBy": "partner",
+    "splitType": "100% partner",
+    "visibility": "personal",
+    "source": "webhook-apple-pay",
+    "clientEventId": null,
+    "deviceUser": null,
+    "capturedAt": null,
+    "createdAt": {
+      "_seconds": 1781396946,
+      "_nanoseconds": 505000000
+    },
+    "status": "confirmed",
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92"
+  },
+  {
+    "id": "eMJmsHLkvZIgL5rKVax8",
+    "description": "Surpresa",
+    "coupleId": "arthur-namorada-2026",
+    "amount": 8800,
+    "date": "2026-06-05",
+    "monthKey": "2026-06",
+    "type": "expense",
+    "paidBy": "Zara",
+    "splitType": "100% partner",
+    "createdAt": {
+      "_seconds": 1780665066,
+      "_nanoseconds": 436000000
+    },
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "visibility": "shared",
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92",
+    "status": "confirmed"
+  },
+  {
+    "id": "hf0Vu1zgJy9iBQshX8C5",
+    "type": "expense",
+    "description": "Univag Centro Universi",
+    "amount": 400,
+    "date": "2026-06-10",
+    "monthKey": "2026-06",
+    "coupleId": "arthur-namorada-2026",
+    "paidBy": "partner",
+    "splitType": "100% partner",
+    "visibility": "personal",
+    "source": "webhook-apple-pay",
+    "createdAt": {
+      "_seconds": 1781096704,
+      "_nanoseconds": 745000000
+    },
+    "status": "confirmed",
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92"
+  },
+  {
+    "id": "hrpWO90WeWPVHCcM73y0",
+    "description": "Mc donadls",
+    "coupleId": "arthur-namorada-2026",
+    "amount": 4580,
+    "date": "2026-06-05",
+    "monthKey": "2026-06",
+    "type": "expense",
+    "paidBy": "Zara",
+    "splitType": "100% partner",
+    "createdAt": {
+      "_seconds": 1780693715,
+      "_nanoseconds": 31000000
+    },
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "visibility": "shared",
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92",
+    "status": "confirmed"
+  },
+  {
+    "id": "kEO1A4DMyX326J9uFepU",
+    "description": "Pix de acerto",
+    "amount": 8541,
+    "date": "2026-05-31",
+    "monthKey": "2026-05",
+    "coupleId": "arthur-namorada-2026",
+    "type": "settlement",
+    "from": "partner",
+    "to": "owner",
+    "createdAt": {
+      "_seconds": 1780278474,
+      "_nanoseconds": 45000000
+    },
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "pixDestination": "shared",
+    "visibility": "shared",
+    "status": "confirmed"
+  },
+  {
+    "id": "kacdYSSzVTdXsFpwbr4l",
+    "date": "2026-07-10",
+    "amount": 12999,
+    "monthKey": "2026-07",
+    "visibility": "personal",
+    "paidBy": "partner",
+    "groupId": "F6pbcZ0kS73oXG2yN8jb",
+    "description": "Havan Cuiaba Bosq Da S",
+    "type": "expense",
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92",
+    "splitType": "100% partner",
+    "coupleId": "arthur-namorada-2026",
+    "createdAt": {
+      "_seconds": 1781125991,
+      "_nanoseconds": 912000000
+    },
+    "originalAmount": 25998,
+    "installmentCount": 2,
+    "currentInstallment": 2,
+    "status": "confirmed",
+    "updatedAt": {
+      "_seconds": 1781125991,
+      "_nanoseconds": 912000000
+    }
+  },
+  {
+    "id": "kjLo8WPptzP6HP3aa5QC",
+    "description": "Esmalte",
+    "coupleId": "arthur-namorada-2026",
+    "amount": 1500,
+    "date": "2026-06-05",
+    "monthKey": "2026-06",
+    "type": "expense",
+    "paidBy": "Zara",
+    "splitType": "100% partner",
+    "createdAt": {
+      "_seconds": 1780683802,
+      "_nanoseconds": 672000000
+    },
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "visibility": "shared",
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92",
+    "status": "confirmed"
+  },
+  {
+    "id": "lZquABrjhqddqZHeiPf4",
+    "description": "DIA DE FESTA",
+    "coupleId": "arthur-namorada-2026",
+    "amount": 2380,
+    "date": "2026-06-11",
+    "monthKey": "2026-06",
+    "type": "expense",
+    "paidBy": "partner",
+    "splitType": "100% partner",
+    "visibility": "personal",
+    "createdAt": {
+      "_seconds": 1781216885,
+      "_nanoseconds": 791000000
+    },
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92",
+    "status": "confirmed"
+  },
+  {
+    "id": "leIFaK6f0ZdNBQ1KAgpQ",
+    "description": "Dominos",
+    "amount": 6980,
+    "date": "2026-05-30",
+    "monthKey": "2026-05",
+    "coupleId": "arthur-namorada-2026",
+    "type": "expense",
+    "paidBy": "Arthur",
+    "splitType": "50/50",
+    "createdAt": {
+      "_seconds": 1780191339,
+      "_nanoseconds": 231000000
+    },
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "visibility": "shared",
+    "status": "confirmed"
+  },
+  {
+    "id": "o0qDXf5COCqBl1iMaA0K",
+    "description": "Correção Fatura (Zara Esqueceu Dos Centavos)",
+    "coupleId": "arthur-namorada-2026",
+    "amount": 153,
+    "date": "2026-06-10",
+    "monthKey": "2026-06",
+    "type": "expense",
+    "paidBy": "partner",
+    "splitType": "100% partner",
+    "visibility": "personal",
+    "createdAt": {
+      "_seconds": 1781141267,
+      "_nanoseconds": 992000000
+    },
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92",
+    "status": "confirmed"
+  },
+  {
+    "id": "pwypJa8aafnYJqm2MoWQ",
+    "description": "Renner",
+    "coupleId": "arthur-namorada-2026",
+    "amount": 9490,
+    "date": "2026-07-05",
+    "monthKey": "2026-07",
+    "type": "expense",
+    "paidBy": "Zara",
+    "splitType": "100% partner",
+    "installmentCount": 2,
+    "currentInstallment": 2,
+    "groupId": "Fdjc0C8M02CEB1DMdrSz",
+    "originalAmount": 18980,
+    "createdAt": {
+      "_seconds": 1780683647,
+      "_nanoseconds": 116000000
+    },
+    "updatedAt": {
+      "_seconds": 1780683647,
+      "_nanoseconds": 116000000
+    },
+    "visibility": "shared",
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92",
+    "status": "confirmed"
+  },
+  {
+    "id": "snn5iUFJR4DudFdUwn1w",
+    "description": "Renner",
+    "coupleId": "arthur-namorada-2026",
+    "amount": 9490,
+    "date": "2026-06-05",
+    "monthKey": "2026-06",
+    "type": "expense",
+    "paidBy": "Zara",
+    "splitType": "100% partner",
+    "installmentCount": 2,
+    "currentInstallment": 1,
+    "groupId": "Fdjc0C8M02CEB1DMdrSz",
+    "originalAmount": 18980,
+    "createdAt": {
+      "_seconds": 1780683646,
+      "_nanoseconds": 919000000
+    },
+    "updatedAt": {
+      "_seconds": 1780683646,
+      "_nanoseconds": 919000000
+    },
+    "visibility": "shared",
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92",
+    "status": "confirmed"
+  },
+  {
+    "id": "soJl88zbc4conLebQt6N",
+    "description": "Pix de acerto",
+    "amount": 10900,
+    "date": "2026-05-31",
+    "monthKey": "2026-05",
+    "coupleId": "arthur-namorada-2026",
+    "type": "settlement",
+    "from": "partner",
+    "to": "owner",
+    "createdAt": {
+      "_seconds": 1780270671,
+      "_nanoseconds": 116000000
+    },
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "pixDestination": "shared",
+    "visibility": "shared",
+    "status": "confirmed"
+  },
+  {
+    "id": "ssjILoQ11RocGtS6jGy3",
+    "description": "Mercado",
+    "coupleId": "arthur-namorada-2026",
+    "amount": 1350,
+    "date": "2026-06-04",
+    "monthKey": "2026-06",
+    "type": "expense",
+    "paidBy": "Zara",
+    "splitType": "100% partner",
+    "createdAt": {
+      "_seconds": 1780597284,
+      "_nanoseconds": 605000000
+    },
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "visibility": "shared",
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92",
+    "status": "confirmed"
+  },
+  {
+    "id": "uc9Ze0bX6AQTys03ERNc",
+    "description": "Outback",
+    "amount": 15000,
+    "date": "2026-05-31",
+    "monthKey": "2026-05",
+    "coupleId": "arthur-namorada-2026",
+    "type": "expense",
+    "paidBy": "Arthur",
+    "splitType": "50/50",
+    "createdAt": {
+      "_seconds": 1780253197,
+      "_nanoseconds": 653000000
+    },
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "visibility": "shared",
+    "status": "confirmed"
+  },
+  {
+    "id": "umecP29xmmAV0hSidiyF",
+    "description": "Pix de acerto",
+    "amount": 90,
+    "date": "2026-05-31",
+    "monthKey": "2026-05",
+    "coupleId": "arthur-namorada-2026",
+    "type": "settlement",
+    "from": "partner",
+    "to": "owner",
+    "createdAt": {
+      "_seconds": 1780270724,
+      "_nanoseconds": 656000000
+    },
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "pixDestination": "shared",
+    "visibility": "shared",
+    "status": "confirmed"
+  },
+  {
+    "id": "zMuL6mhNaL5Pdnh3Zk0g",
+    "description": "Vermelhinho",
+    "coupleId": "arthur-namorada-2026",
+    "amount": 1700,
+    "date": "2026-06-11",
+    "monthKey": "2026-06",
+    "type": "expense",
+    "paidBy": "partner",
+    "splitType": "100% partner",
+    "visibility": "personal",
+    "createdAt": {
+      "_seconds": 1781216141,
+      "_nanoseconds": 420000000
+    },
+    "groupId": "arthur-namorada-2026",
+    "updatedAt": {
+      "_seconds": 1781559522,
+      "_nanoseconds": 737000000
+    },
+    "personalOwnerUserId": "frOMwJQLWnhGLdps0kgHJk68En92",
+    "status": "confirmed"
+  }
+]
