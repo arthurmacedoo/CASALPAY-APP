@@ -112,7 +112,7 @@ const PendingTransactionCard: React.FC<{
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuthContext();
-  const { group, currentMember } = useGroupContext();
+  const { group, currentMember, members } = useGroupContext();
   const currentMonth = getCurrentMonthKey();
 
   const { transactions, loading, error } = useTransactions(currentMonth);
@@ -152,8 +152,8 @@ export const HomePage: React.FC = () => {
 
   // ── Cálculos ─────────────────────────────────────────────────────────────────
   const balance = useMemo(
-    () => calculateBalance(sharedTransactions),
-    [sharedTransactions]
+    () => calculateBalance(sharedTransactions, members),
+    [sharedTransactions, members]
   );
 
   const myInvoiceTotal = useMemo(
@@ -173,7 +173,7 @@ export const HomePage: React.FC = () => {
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
   const handleCopyPix = async () => {
-    const text = generatePixSummary(balance, formatMonthLabel(currentMonth));
+    const text = generatePixSummary(balance, formatMonthLabel(currentMonth), members);
     try {
       await navigator.clipboard.writeText(text);
     } catch {

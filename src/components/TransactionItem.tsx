@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import type { Transaction, ExpenseTransaction, SettlementTransaction } from "../types";
 import { createPortal } from "react-dom";
 import { formatBRL, formatDateBR, formatSplitType } from "../lib/formatters";
-import { calculateExpenseDebt, calculateSettlementEffect } from "../lib/calculations";
+import { calculateExpenseDebt, calculateSettlementEffect, resolveAdminUid, resolveMemberUid, resolvePaidByUid, resolveSettlementUids } from "../lib/calculations";
 import { useGroupContext } from "../contexts/GroupContext";
 
 interface TransactionItemProps {
@@ -38,13 +38,14 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
       const owner = members.find(m => m.userId === transaction.personalOwnerUserId);
       avatarInitial = owner?.name.charAt(0).toUpperCase() || "👤";
     } else {
-      const payerIndex = transaction.paidBy === "partner" ? 1 : 0;
-      const payer = members[payerIndex] || members[0];
+      const adminUid = resolveAdminUid(members);
+      const memberUid = resolveMemberUid(members);
+      const payerUid = resolvePaidByUid(transaction as ExpenseTransaction, adminUid, memberUid);
+      const payer = members.find(m => m.userId === payerUid) || members[0];
       if (payer) {
         avatarInitial = payer.name.charAt(0).toUpperCase();
       } else {
-        // Fallback legado visual
-        avatarInitial = transaction.paidBy === "owner" ? "A" : "Z";
+        avatarInitial = "👤";
       }
     }
   }
@@ -72,7 +73,9 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
             {isExpense && ` · ${
               transaction.visibility === "personal" && transaction.personalOwnerUserId
                 ? `Só de ${members.find(m => m.userId === transaction.personalOwnerUserId)?.name?.split(' ')[0] || "Membro"}`
-                : formatSplitType(transaction.splitType)
+                : (transaction as ExpenseTransaction).splitMode === "personal"
+                  ? "Gasto Pessoal"
+                  : formatSplitType(transaction.splitType || "")
             }`}
           </p>
 
@@ -143,14 +146,16 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
 // ─── Sub-componentes para exibir os detalhes ──────────────────────────────────
 
 const ExpenseDetails: React.FC<{ transaction: ExpenseTransaction, members: any[] }> = ({ transaction, members }) => {
-  const debt = calculateExpenseDebt(transaction);
+  const debt = calculateExpenseDebt(transaction, members);
   const isNobodyOwes = debt === 0;
 
-  const payerIndex = transaction.paidBy === "partner" ? 1 : 0;
-  const payer = members[payerIndex] || members[0];
+  const adminUid = resolveAdminUid(members);
+  const memberUid = resolveMemberUid(members);
+  const payerUid = resolvePaidByUid(transaction, adminUid, memberUid);
+  const payer = members.find(m => m.userId === payerUid);
   const payerName = payer ? payer.name.split(' ')[0] : "Membro";
 
-  const paidByColor = transaction.paidBy === "owner" ? "text-accent-blue" : "text-accent-pink";
+  const paidByColor = transaction.paidBy === "owner" || (adminUid && payerUid === adminUid) ? "text-accent-blue" : "text-accent-pink";
   const debtColor = isNobodyOwes ? "text-text-muted" : "text-accent-pink";
   
   const debtText = isNobodyOwes
@@ -173,11 +178,13 @@ const ExpenseDetails: React.FC<{ transaction: ExpenseTransaction, members: any[]
 const SettlementDetails: React.FC<{ transaction: SettlementTransaction, members: any[] }> = ({ transaction, members }) => {
   const effect = calculateSettlementEffect(transaction);
   
-  const senderIndex = transaction.from === "partner" ? 1 : 0;
-  const sender = members[senderIndex] || members[0];
+  const adminUid = resolveAdminUid(members);
+  const memberUid = resolveMemberUid(members);
+  const { fromUid } = resolveSettlementUids(transaction, adminUid, memberUid);
+  const sender = members.find(m => m.userId === fromUid);
   const senderName = sender ? sender.name.split(' ')[0] : "Membro";
 
-  const fromColor = transaction.from === "owner" ? "text-accent-blue" : "text-accent-pink";
+  const fromColor = transaction.from === "owner" || (adminUid && fromUid === adminUid) ? "text-accent-blue" : "text-accent-pink";
   const effectText = effect > 0 
     ? `Reduziu dívida` 
     : `Reduziu dívida`;

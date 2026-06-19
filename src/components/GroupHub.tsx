@@ -26,9 +26,10 @@ export const GroupHub: React.FC<GroupHubProps> = ({ groups, onOpenCreate, onOpen
   // Estado B: Nenhum grupo
   if (groups.length === 0) {
     return (
-      <div className="flex flex-col min-h-screen min-h-dvh safe-top bg-[#0D0D12] text-[#F0F0F8]">
-        <header className="px-6 py-4 flex items-center justify-between border-b border-border bg-bg">
-          <div className="flex items-center gap-3">
+      <div className="flex flex-col min-h-screen min-h-dvh bg-[#0D0D12] text-[#F0F0F8]">
+        <header className="pt-[env(safe-area-inset-top)] bg-bg border-b border-border">
+          <div className="px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-accent-blue/20 flex items-center justify-center text-accent-blue font-bold text-lg uppercase">
               {user?.email?.[0] ?? "U"}
             </div>
@@ -43,6 +44,7 @@ export const GroupHub: React.FC<GroupHubProps> = ({ groups, onOpenCreate, onOpen
           >
             Sair
           </button>
+          </div>
         </header>
 
         <main className="flex-1 overflow-y-auto flex flex-col items-center px-6 py-10">
@@ -89,9 +91,10 @@ export const GroupHub: React.FC<GroupHubProps> = ({ groups, onOpenCreate, onOpen
 
   // Estado A: Tem 1+ grupos
   return (
-    <div className="flex flex-col min-h-screen min-h-dvh safe-top bg-[#0D0D12] text-[#F0F0F8]">
-      <header className="px-6 py-4 flex items-center justify-between border-b border-border bg-bg">
-        <div className="flex items-center gap-3">
+    <div className="flex flex-col min-h-screen min-h-dvh bg-[#0D0D12] text-[#F0F0F8]">
+      <header className="pt-[env(safe-area-inset-top)] bg-bg border-b border-border">
+        <div className="px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-accent-blue/20 flex items-center justify-center text-accent-blue font-bold text-lg uppercase">
             {user?.email?.[0] ?? "U"}
           </div>
@@ -106,6 +109,7 @@ export const GroupHub: React.FC<GroupHubProps> = ({ groups, onOpenCreate, onOpen
         >
           Sair
         </button>
+        </div>
       </header>
 
       <main className="flex-1 overflow-y-auto flex flex-col items-center px-6 py-10">

@@ -55,17 +55,19 @@ export const GroupSettingsSheet: React.FC<GroupSettingsSheetProps> = ({ isOpen, 
   return createPortal(
     <div className="fixed inset-0 z-50 bg-bg animate-slide-left flex flex-col overflow-y-auto" onClick={(e) => e.stopPropagation()}>
       {/* Header estilo página */}
-      <header className="safe-top px-4 pt-4 pb-4 flex items-center gap-3 border-b border-border bg-bg-card sticky top-0 z-10">
-        <button 
-          onClick={onClose}
-          className="w-10 h-10 rounded-full flex items-center justify-center bg-bg-elevated border border-border text-text-primary hover:bg-white/5 transition-colors"
-          aria-label="Voltar"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <h2 className="text-lg font-bold text-text-primary">Configurações</h2>
+      <header className="pt-[env(safe-area-inset-top)] bg-bg-card border-b border-border sticky top-0 z-10">
+        <div className="px-4 py-4 flex items-center gap-3">
+          <button 
+            onClick={onClose}
+            className="w-10 h-10 rounded-full flex items-center justify-center bg-bg-elevated border border-border text-text-primary hover:bg-white/5 transition-colors"
+            aria-label="Voltar"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <h2 className="text-lg font-bold text-text-primary">Configurações</h2>
+        </div>
       </header>
 
       {/* Conteúdo principal */}

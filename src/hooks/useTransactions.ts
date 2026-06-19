@@ -36,7 +36,7 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { group, currentMember } = useGroupContext();
+  const { group, currentMember, members } = useGroupContext();
 
   useEffect(() => {
     setLoading(true);
@@ -62,10 +62,79 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
       q,
       (snapshot) => {
         const docs: Transaction[] = snapshot.docs.map((docSnap) => {
-          return {
+          const data = {
             id: docSnap.id,
             ...docSnap.data(),
           } as Transaction;
+
+          // ── Runtime Hydration para Retrocompatibilidade ──
+          if (members && members.length > 0) {
+            const adminMember = members.find(m => m.role === "admin");
+            const partnerMember = members.find(m => m.role === "member");
+            
+            if (data.type === "expense") {
+              const splitType = (data.splitType || "").toLowerCase();
+              const pb = (data.paidBy || "").toLowerCase();
+
+              // 1. Injetar visibility e personalOwnerUserId
+              if (!data.visibility) {
+                if (splitType === "100% partner" || splitType === "100% zara" || splitType === "100% namorada") {
+                  data.visibility = "personal";
+                  if (partnerMember) data.personalOwnerUserId = partnerMember.userId;
+                } else if (splitType === "100% owner" || splitType === "100% arthur") {
+                  data.visibility = "personal";
+                  if (adminMember) data.personalOwnerUserId = adminMember.userId;
+                } else if (splitType === "gasto pessoal") {
+                  data.visibility = "personal";
+                  if (pb === "owner" || pb === "arthur") {
+                    if (adminMember) data.personalOwnerUserId = adminMember.userId;
+                  } else if (pb === "partner" || pb === "zara" || pb === "namorada") {
+                    if (partnerMember) data.personalOwnerUserId = partnerMember.userId;
+                  }
+                } else {
+                  data.visibility = "shared";
+                }
+              }
+
+              // 2. Injetar paidByUserId
+              if (!data.paidByUserId) {
+                if (pb === "owner" || pb === "arthur") {
+                  if (adminMember) data.paidByUserId = adminMember.userId;
+                } else if (pb === "partner" || pb === "zara" || pb === "namorada") {
+                  if (partnerMember) data.paidByUserId = partnerMember.userId;
+                }
+              }
+            } else if (data.type === "settlement") {
+              if (!data.visibility) {
+                if (data.pixDestination === "zara_card") {
+                  data.visibility = "personal";
+                  if (partnerMember) data.personalOwnerUserId = partnerMember.userId;
+                } else {
+                  data.visibility = "shared";
+                }
+              }
+              
+              if (!data.fromUserId) {
+                const fr = (data.from || "").toLowerCase();
+                if (fr === "owner" || fr === "arthur") {
+                  if (adminMember) data.fromUserId = adminMember.userId;
+                } else if (fr === "partner" || fr === "zara" || fr === "namorada") {
+                  if (partnerMember) data.fromUserId = partnerMember.userId;
+                }
+              }
+              
+              if (!data.toUserId) {
+                const to = (data.to || "").toLowerCase();
+                if (to === "owner" || to === "arthur") {
+                  if (adminMember) data.toUserId = adminMember.userId;
+                } else if (to === "partner" || to === "zara" || to === "namorada") {
+                  if (partnerMember) data.toUserId = partnerMember.userId;
+                }
+              }
+            }
+          }
+
+          return data;
         }).filter((t) => !t.status || t.status === "confirmed");
         
         setTransactions(docs);
@@ -89,7 +158,7 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
     );
 
     return unsubscribe;
-  }, [monthKey, group, currentMember]);
+  }, [monthKey, group, currentMember, members]);
 
   const addTransaction = useCallback(
     async (data: TransactionFormData, amountCents: number) => {
@@ -98,7 +167,7 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
 
       const baseData = {
         description: data.description.trim(),
-        coupleId: activeGroupId, 
+        coupleId: activeGroupId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -108,99 +177,86 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
         const baseAmount = Math.floor(amountCents / count);
         const remainder = amountCents % count;
         const installmentGroupId = doc(collection(db, "groups")).id;
-
         const [year, month, day] = data.date.split("-").map(Number);
-        
         const batch = writeBatch(db);
-        
+
+        const visibility: "shared" | "personal" = data.splitMode === "personal" ? "personal" : "shared";
+        const personalOwnerUserId = data.personalOwnerUserId;
+
+        if (visibility === "personal" && !personalOwnerUserId) {
+          throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
+        }
+
         for (let i = 1; i <= count; i++) {
           const installmentAmount = i === 1 ? baseAmount + remainder : baseAmount;
-          
           const targetMonthZeroIndex = month - 1 + (i - 1);
           const newYear = year + Math.floor(targetMonthZeroIndex / 12);
           const newMonthIndex = targetMonthZeroIndex % 12;
           const lastDayOfTargetMonth = new Date(newYear, newMonthIndex + 1, 0).getDate();
           const newDay = Math.min(day, lastDayOfTargetMonth);
-          
           const newMonthStr = String(newMonthIndex + 1).padStart(2, "0");
           const newDayStr = String(newDay).padStart(2, "0");
           const newDateStr = `${newYear}-${newMonthStr}-${newDayStr}`;
 
-          const isPersonalOwner = data.splitType === "100% owner";
-          const isPersonalPartner = data.splitType === "100% partner";
-          const visibility = (isPersonalOwner || isPersonalPartner) ? "personal" : "shared";
-          const personalOwnerUserId = (data as ExpenseFormData).personalOwnerUserId;
-
-          if (visibility === "personal" && !personalOwnerUserId) {
-            throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
-          }
-
-          const docData = {
+          const newDocRef = doc(transactionsRef(activeGroupId));
+          batch.set(newDocRef, {
             ...baseData,
             amount: installmentAmount,
             date: newDateStr,
             monthKey: getMonthKey(newDateStr),
             type: "expense",
-            paidBy: data.paidBy,
-            splitType: data.splitType,
+            paidByUserId: data.paidByUserId,
+            splitBetweenUserIds: data.splitBetweenUserIds,
+            splitMode: data.splitMode,
             installmentCount: count,
             currentInstallment: i,
             groupId: installmentGroupId,
             originalAmount: amountCents,
-            visibility: visibility,
-            personalOwnerUserId: personalOwnerUserId || null,
-          };
-
-          const newDocRef = doc(transactionsRef(activeGroupId));
-          batch.set(newDocRef, docData);
+            visibility,
+            personalOwnerUserId: personalOwnerUserId ?? null,
+          });
         }
         await batch.commit();
-      } else {
-        let docData;
-        if (data.type === "expense") {
-          const isPersonalOwner = data.splitType === "100% owner";
-          const isPersonalPartner = data.splitType === "100% partner";
-          const visibility = (isPersonalOwner || isPersonalPartner) ? "personal" : "shared";
-          const personalOwnerUserId = (data as ExpenseFormData).personalOwnerUserId;
+      } else if (data.type === "expense") {
+        const visibility: "shared" | "personal" = data.splitMode === "personal" ? "personal" : "shared";
+        const personalOwnerUserId = data.personalOwnerUserId;
 
-          if (visibility === "personal" && !personalOwnerUserId) {
-            throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
-          }
-
-          docData = {
-            ...baseData,
-            amount: amountCents,
-            date: data.date,
-            monthKey: getMonthKey(data.date),
-            type: "expense",
-            paidBy: data.paidBy,
-            splitType: data.splitType,
-            visibility: visibility,
-            personalOwnerUserId: personalOwnerUserId || null,
-          };
-        } else {
-          const visibility = data.pixDestination === "zara_card" ? "personal" : "shared";
-          const personalOwnerUserId = (data as SettlementFormData).personalOwnerUserId;
-
-          if (visibility === "personal" && !personalOwnerUserId) {
-            throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
-          }
-
-          docData = {
-            ...baseData,
-            amount: amountCents,
-            date: data.date,
-            monthKey: getMonthKey(data.date),
-            type: "settlement",
-            from: data.from,
-            to: data.to,
-            pixDestination: data.pixDestination || "shared",
-            visibility: visibility,
-            personalOwnerUserId: personalOwnerUserId || null,
-          };
+        if (visibility === "personal" && !personalOwnerUserId) {
+          throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
         }
 
-        await addDoc(transactionsRef(activeGroupId), docData);
+        await addDoc(transactionsRef(activeGroupId), {
+          ...baseData,
+          amount: amountCents,
+          date: data.date,
+          monthKey: getMonthKey(data.date),
+          type: "expense",
+          paidByUserId: data.paidByUserId,
+          splitBetweenUserIds: data.splitBetweenUserIds,
+          splitMode: data.splitMode,
+          visibility,
+          personalOwnerUserId: personalOwnerUserId ?? null,
+        });
+      } else {
+        // settlement
+        const visibility: "shared" | "personal" = data.isPersonalInvoice ? "personal" : "shared";
+        const personalOwnerUserId = data.personalOwnerUserId;
+
+        if (visibility === "personal" && !personalOwnerUserId) {
+          throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
+        }
+
+        await addDoc(transactionsRef(activeGroupId), {
+          ...baseData,
+          amount: amountCents,
+          date: data.date,
+          monthKey: getMonthKey(data.date),
+          type: "settlement",
+          fromUserId: data.fromUserId,
+          toUserId: data.toUserId,
+          visibility,
+          personalOwnerUserId: personalOwnerUserId ?? null,
+        });
       }
     },
     [group]
@@ -214,12 +270,30 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
       const wasInstallment = originalTransaction.type === "expense" && Boolean(originalTransaction.groupId);
       const willBeInstallment = data.type === "expense" && Boolean(data.isInstallment) && (data.installmentCount ?? 0) > 1;
 
+      // ─ Helper: resolve visibility + personalOwnerUserId do novo formato ─
+      const resolveExpenseVisibility = (d: ExpenseFormData): { visibility: "shared" | "personal"; personalOwnerUserId: string | null } => {
+        const visibility: "shared" | "personal" = d.splitMode === "personal" ? "personal" : "shared";
+        const personalOwnerUserId = d.personalOwnerUserId ?? null;
+        if (visibility === "personal" && !personalOwnerUserId) {
+          throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
+        }
+        return { visibility, personalOwnerUserId };
+      };
+
+      const resolveSettlementVisibility = (d: SettlementFormData): { visibility: "shared" | "personal"; personalOwnerUserId: string | null } => {
+        const visibility: "shared" | "personal" = d.isPersonalInvoice ? "personal" : "shared";
+        const personalOwnerUserId = d.personalOwnerUserId ?? null;
+        if (visibility === "personal" && !personalOwnerUserId) {
+          throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
+        }
+        return { visibility, personalOwnerUserId };
+      };
+
       if (wasInstallment || willBeInstallment) {
         const batch = writeBatch(db);
 
         // 1. Apagar parcelas antigas
         const expenseOrig = originalTransaction.type === "expense" ? originalTransaction : null;
-        // PROTEÇÃO CRÍTICA: Se o groupId for igual ao activeGroupId (erro de migração antiga), NUNCA apagar o grupo inteiro.
         if (expenseOrig?.groupId && expenseOrig.groupId !== activeGroupId) {
           const oldGroupSnap = await getDocs(
             query(transactionsRef(activeGroupId), where("groupId", "==", expenseOrig.groupId))
@@ -230,12 +304,13 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
         }
 
         // 2. Criar as N novas parcelas no mesmo batch
-        if (willBeInstallment) {
+        if (willBeInstallment && data.type === "expense") {
           const count = data.installmentCount!;
           const baseAmount = Math.floor(amountCents / count);
           const remainder = amountCents % count;
           const installmentGroupId = doc(collection(db, "groups")).id;
           const [year, month, day] = data.date.split("-").map(Number);
+          const { visibility, personalOwnerUserId } = resolveExpenseVisibility(data);
 
           for (let i = 1; i <= count; i++) {
             const installmentAmount = i === 1 ? baseAmount + remainder : baseAmount;
@@ -245,15 +320,6 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
             const lastDayOfTargetMonth = new Date(newYear, newMonthIndex + 1, 0).getDate();
             const newDay = Math.min(day, lastDayOfTargetMonth);
             const newDateStr = `${newYear}-${String(newMonthIndex + 1).padStart(2, "0")}-${String(newDay).padStart(2, "0")}`;
-            
-            const isPersonalOwner = data.splitType === "100% owner";
-            const isPersonalPartner = data.splitType === "100% partner";
-            const visibility = (isPersonalOwner || isPersonalPartner) ? "personal" : "shared";
-            const personalOwnerUserId = (data as ExpenseFormData).personalOwnerUserId;
-
-            if (visibility === "personal" && !personalOwnerUserId) {
-              throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
-            }
 
             batch.set(doc(transactionsRef(activeGroupId)), {
               description: data.description.trim(),
@@ -262,65 +328,65 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
               date: newDateStr,
               monthKey: getMonthKey(newDateStr),
               type: "expense",
-              paidBy: data.paidBy,
-              splitType: data.splitType,
+              paidByUserId: data.paidByUserId,
+              splitBetweenUserIds: data.splitBetweenUserIds,
+              splitMode: data.splitMode,
               installmentCount: count,
               currentInstallment: i,
               groupId: installmentGroupId,
               originalAmount: amountCents,
               visibility,
-              personalOwnerUserId: personalOwnerUserId || null,
+              personalOwnerUserId: personalOwnerUserId ?? null,
               status: "confirmed",
               createdAt: serverTimestamp(),
               updatedAt: serverTimestamp(),
             });
           }
         } else {
-          let visibility: "shared" | "personal" = "shared";
-          let personalOwnerUserId: string | null = null;
-
+          // Recriou como simples
           if (data.type === "expense") {
-            const isPersonalOwner = data.splitType === "100% owner";
-            const isPersonalPartner = data.splitType === "100% partner";
-            visibility = (isPersonalOwner || isPersonalPartner) ? "personal" : "shared";
-            personalOwnerUserId = (data as ExpenseFormData).personalOwnerUserId || null;
-
-            if (visibility === "personal" && !personalOwnerUserId) {
-              throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
-            }
+            const { visibility, personalOwnerUserId } = resolveExpenseVisibility(data);
+            batch.set(doc(transactionsRef(activeGroupId)), {
+              description: data.description.trim(),
+              coupleId: activeGroupId,
+              amount: amountCents,
+              date: data.date,
+              monthKey: getMonthKey(data.date),
+              type: "expense",
+              paidByUserId: data.paidByUserId,
+              splitBetweenUserIds: data.splitBetweenUserIds,
+              splitMode: data.splitMode,
+              visibility,
+              personalOwnerUserId: personalOwnerUserId ?? null,
+              status: "confirmed",
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
           } else {
-            visibility = data.pixDestination === "zara_card" ? "personal" : "shared";
-            personalOwnerUserId = (data as SettlementFormData).personalOwnerUserId || null;
-
-            if (visibility === "personal" && !personalOwnerUserId) {
-              throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
-            }
+            const { visibility, personalOwnerUserId } = resolveSettlementVisibility(data);
+            batch.set(doc(transactionsRef(activeGroupId)), {
+              description: data.description.trim(),
+              coupleId: activeGroupId,
+              amount: amountCents,
+              date: data.date,
+              monthKey: getMonthKey(data.date),
+              type: "settlement",
+              fromUserId: data.fromUserId,
+              toUserId: data.toUserId,
+              visibility,
+              personalOwnerUserId: personalOwnerUserId ?? null,
+              status: "confirmed",
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
           }
-
-          batch.set(doc(transactionsRef(activeGroupId)), {
-            description: data.description.trim(),
-            coupleId: activeGroupId,
-            amount: amountCents,
-            date: data.date,
-            monthKey: getMonthKey(data.date),
-            type: data.type,
-            ...(data.type === "expense"
-              ? { paidBy: data.paidBy, splitType: data.splitType }
-              : { from: data.from, to: data.to, pixDestination: data.pixDestination || "shared" }
-            ),
-            visibility,
-            personalOwnerUserId,
-            status: "confirmed",
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
         }
 
         await batch.commit();
         return;
       }
 
-      // ─── Cenário B: edição simples de compra única ─────────────────────────
+      // ─── Cenário B: edição simples ──────────────────────────────────────
       const baseData = {
         description: data.description.trim(),
         amount: amountCents,
@@ -332,25 +398,26 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
 
       let docData;
       if (data.type === "expense") {
-        const isPersonalOwner = data.splitType === "100% owner";
-        const isPersonalPartner = data.splitType === "100% partner";
-        const visibility = (isPersonalOwner || isPersonalPartner) ? "personal" : "shared";
-        const personalOwnerUserId = (data as ExpenseFormData).personalOwnerUserId || null;
-        
-        if (visibility === "personal" && !personalOwnerUserId) {
-           throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
-        }
-        
-        docData = { ...baseData, type: "expense" as const, paidBy: data.paidBy, splitType: data.splitType, visibility, personalOwnerUserId };
+        const { visibility, personalOwnerUserId } = resolveExpenseVisibility(data);
+        docData = {
+          ...baseData,
+          type: "expense" as const,
+          paidByUserId: data.paidByUserId,
+          splitBetweenUserIds: data.splitBetweenUserIds,
+          splitMode: data.splitMode,
+          visibility,
+          personalOwnerUserId: personalOwnerUserId ?? null,
+        };
       } else {
-        const visibility = data.pixDestination === "zara_card" ? "personal" : "shared";
-        const personalOwnerUserId = (data as SettlementFormData).personalOwnerUserId || null;
-        
-        if (visibility === "personal" && !personalOwnerUserId) {
-           throw new Error("O usuário responsável pela fatura pessoal não foi identificado.");
-        }
-        
-        docData = { ...baseData, type: "settlement" as const, from: data.from, to: data.to, pixDestination: data.pixDestination || "shared", visibility, personalOwnerUserId };
+        const { visibility, personalOwnerUserId } = resolveSettlementVisibility(data);
+        docData = {
+          ...baseData,
+          type: "settlement" as const,
+          fromUserId: data.fromUserId,
+          toUserId: data.toUserId,
+          visibility,
+          personalOwnerUserId: personalOwnerUserId ?? null,
+        };
       }
 
       await updateDoc(transactionDocRef(activeGroupId, originalTransaction.id), docData);

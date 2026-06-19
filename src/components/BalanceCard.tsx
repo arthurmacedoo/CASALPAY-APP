@@ -1,8 +1,7 @@
 import React from "react";
 import type { BalanceSummary } from "../types";
 import { formatBRL, formatMonthLabel } from "../lib/formatters";
-import { useAuthContext } from "../contexts/AuthContext";
-import { OWNER_EMOJI, PARTNER_EMOJI } from "../constants/couple";
+import { useGroupContext } from "../contexts/GroupContext";
 
 interface BalanceCardProps {
   balance: BalanceSummary;
@@ -21,37 +20,43 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
     netBalance,
   } = balance;
 
-  const isEven = netBalance === 0;
-  const zaraOwes = netBalance > 0;
+  const { members, currentMember } = useGroupContext();
 
-  const { user } = useAuthContext();
-  const isArthur = user?.email?.toLowerCase().startsWith("arthur");
+  const isEven = netBalance === 0;
+  const isAdmin = currentMember?.role === "admin";
+  const adminOwes = netBalance < 0; // Admin should pay
+  const adminReceives = netBalance > 0; // Admin should receive
+
+  // Find the other member (assuming 2 members)
+  const otherMember = members.find(m => m.userId !== currentMember?.userId);
+  const otherName = otherMember ? otherMember.name.split(' ')[0] : "Parceiro(a)";
+
+  // Zara is originally the partner. If I am admin (Arthur), Zara owes = adminReceives
+  // Let's abstract this dynamically:
+  const iOwe = isAdmin ? adminOwes : adminReceives;
+  const otherOwes = isAdmin ? adminReceives : adminOwes;
 
   const colorClass = isEven
     ? "text-accent-green"
-    : zaraOwes
+    : otherOwes
     ? "text-accent-pink"
     : "text-accent-blue";
 
   const glowClass = isEven
     ? "shadow-[0_0_30px_rgba(74,222,128,0.12)]"
-    : zaraOwes
+    : otherOwes
     ? "shadow-glow"
     : "shadow-glow-blue";
 
   const borderClass = isEven
     ? "border-accent-green/30"
-    : zaraOwes
+    : otherOwes
     ? "border-accent-pink/30"
     : "border-accent-blue/30";
 
   let statusMessage = "Tudo certo por enquanto 🙌";
   if (!isEven) {
-    if (isArthur) {
-      statusMessage = zaraOwes ? "Zara te deve" : "Você deve à Zara";
-    } else {
-      statusMessage = zaraOwes ? "Você deve ao Arthur" : "Arthur te deve";
-    }
+    statusMessage = iOwe ? `Você deve a ${otherName}` : `${otherName} te deve`;
   }
 
   const monthLabel = formatMonthLabel(monthKey);
@@ -71,7 +76,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
           </p>
         </div>
         <div className="w-10 h-10 rounded-2xl bg-bg-elevated flex items-center justify-center text-xl">
-          {isEven ? "✅" : zaraOwes ? PARTNER_EMOJI : OWNER_EMOJI}
+          {isEven ? "✅" : otherOwes ? "💖" : "💙"}
         </div>
       </div>
 

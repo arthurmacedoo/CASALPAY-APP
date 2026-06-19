@@ -67,8 +67,8 @@ export const HistoryPage: React.FC = () => {
   }, [sharedTransactions, invoiceTransactions, activeTab, searchTerm]);
 
   const balance = useMemo(
-    () => calculateBalance(sharedTransactions),
-    [sharedTransactions]
+    () => calculateBalance(sharedTransactions, members),
+    [sharedTransactions, members]
   );
 
   const handleEdit = (t: Transaction) => {
@@ -190,7 +190,7 @@ export const HistoryPage: React.FC = () => {
             <div className="flex gap-4 p-4 border border-border rounded-xl mb-4 bg-bg-elevated animate-fade-in-up">
               <div>
                 <p className="text-xs text-text-muted">Despesas ({sharedTransactions.filter(t => t.type === 'expense').length})</p>
-                <p className="font-medium text-text-primary">{formatBRL(calculateBalance(sharedTransactions).totalExpenses)}</p>
+                <p className="font-medium text-text-primary">{formatBRL(calculateBalance(sharedTransactions, members).totalExpenses)}</p>
               </div>
             </div>
           ) : (
