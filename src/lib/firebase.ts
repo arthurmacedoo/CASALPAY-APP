@@ -99,8 +99,8 @@ export const transactionDocRef = (groupId: string, id: string) =>
   doc(db, "groups", groupId, "transactions", id);
 
 /** Coleção de tokens FCM do casal */
-export const fcmTokensRef = () =>
-  collection(db, "couples", COUPLE_ID, "fcm_tokens");
+export const fcmTokensRef = (groupId: string) =>
+  collection(db, "groups", groupId, "fcm_tokens");
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Referências para a nova arquitetura multi-grupo (Etapa 1+)

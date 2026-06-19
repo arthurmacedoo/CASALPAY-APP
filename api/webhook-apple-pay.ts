@@ -136,7 +136,7 @@ function validateBody(body: Record<string, unknown>): ValidationResult {
  */
 async function saveFallbackExpense(
   db: FirebaseFirestore.Firestore,
-  coupleId: string,
+  groupId: string,
   reason: string,
   rawBody: Record<string, unknown>
 ): Promise<string> {
@@ -148,9 +148,11 @@ async function saveFallbackExpense(
     amount:      1,
     date:        fallbackDate,
     monthKey:    getMonthKey(fallbackDate),
-    coupleId,
-    paidBy:      "partner",
-    splitType:   "100% partner",
+    groupId,
+    paidByUserId: null,
+    personalOwnerUserId: null,
+    splitMode:   "personal",
+    visibility:  "personal",
     status:      "pending",
     source:      "webhook-apple-pay-fallback",
     rawPayload:  JSON.stringify(rawBody).slice(0, 500),
@@ -159,8 +161,8 @@ async function saveFallbackExpense(
   };
 
   const ref = await db
-    .collection("couples")
-    .doc(coupleId)
+    .collection("groups")
+    .doc(groupId)
     .collection("transactions")
     .add(docData);
 
@@ -175,7 +177,7 @@ async function saveFallbackExpense(
  */
 async function sendCriticalAlert(
   db: FirebaseFirestore.Firestore,
-  coupleId: string,
+  groupId: string,
   message: string
 ): Promise<void> {
   if (!getApps().length) return;
@@ -184,8 +186,8 @@ async function sendCriticalAlert(
     const messaging = getMessaging();
 
     const tokensSnap = await db
-      .collection("couples")
-      .doc(coupleId)
+      .collection("groups")
+      .doc(groupId)
       .collection("fcm_tokens")
       .get();
 
@@ -235,13 +237,13 @@ async function sendCriticalAlert(
  */
 async function checkAndRegisterEvent(
   db: FirebaseFirestore.Firestore,
-  coupleId: string,
+  groupId: string,
   eventId: string
 ): Promise<string | null> {
   const sanitized = sanitizeEventId(eventId);
   const eventRef = db
-    .collection("couples")
-    .doc(coupleId)
+    .collection("groups")
+    .doc(groupId)
     .collection("apple_pay_events")
     .doc(sanitized);
 
@@ -259,15 +261,15 @@ async function checkAndRegisterEvent(
  */
 async function markEventProcessed(
   db: FirebaseFirestore.Firestore,
-  coupleId: string,
+  groupId: string,
   eventId: string,
   transactionId: string,
   meta: { amountCents: number; description: string; date: string }
 ): Promise<void> {
   const sanitized = sanitizeEventId(eventId);
   await db
-    .collection("couples")
-    .doc(coupleId)
+    .collection("groups")
+    .doc(groupId)
     .collection("apple_pay_events")
     .doc(sanitized)
     .set({
@@ -297,7 +299,7 @@ export type ProcessEventResult = {
  */
 export async function processApplePayEvent(
   db: FirebaseFirestore.Firestore,
-  coupleId: string,
+  groupId: string,
   rawBody: Record<string, unknown>
 ): Promise<ProcessEventResult> {
   const clientEventId = typeof rawBody.clientEventId === "string"
@@ -306,7 +308,7 @@ export async function processApplePayEvent(
 
   // ── Idempotência ──────────────────────────────────────────────────────────
   if (clientEventId) {
-    const existingId = await checkAndRegisterEvent(db, coupleId, clientEventId);
+    const existingId = await checkAndRegisterEvent(db, groupId, clientEventId);
     if (existingId) {
       console.log(`[webhook] Evento duplicado ignorado: clientEventId="${clientEventId}" → transação="${existingId}"`);
       return { ok: true, duplicate: true, id: existingId, idempotent: true };
@@ -320,11 +322,11 @@ export async function processApplePayEvent(
     const reason = validation.errorReason;
     console.warn(`[webhook] Validação falhou — ${reason} | clientEventId="${clientEventId}"`);
 
-    const fallbackId = await saveFallbackExpense(db, coupleId, reason, rawBody);
+    const fallbackId = await saveFallbackExpense(db, groupId, reason, rawBody);
 
     // Registra o evento de fallback também (evita spam duplicado)
     if (clientEventId) {
-      await markEventProcessed(db, coupleId, clientEventId, fallbackId, {
+      await markEventProcessed(db, groupId, clientEventId, fallbackId, {
         amountCents: 0,
         description: `fallback: ${reason}`,
         date:        validation.finalDate,
@@ -350,9 +352,10 @@ export async function processApplePayEvent(
     amount:      amountCents,
     date:        finalDate,
     monthKey,
-    coupleId,
-    paidBy:      "partner",
-    splitType:   "100% partner",
+    groupId,
+    paidByUserId: null,
+    personalOwnerUserId: null,
+    splitMode:   "personal",
     visibility:  "personal",
     status:      "pending",
     source:      rawBody.source ?? "webhook-apple-pay",
@@ -364,8 +367,8 @@ export async function processApplePayEvent(
   };
 
   const ref = await db
-    .collection("couples")
-    .doc(coupleId)
+    .collection("groups")
+    .doc(groupId)
     .collection("transactions")
     .add(docData);
 
@@ -375,7 +378,7 @@ export async function processApplePayEvent(
 
   // Registra o evento como processado para deduplicação futura
   if (clientEventId) {
-    await markEventProcessed(db, coupleId, clientEventId, ref.id, {
+    await markEventProcessed(db, groupId, clientEventId, ref.id, {
       amountCents,
       description,
       date: finalDate,
@@ -422,18 +425,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: "Firebase Admin não inicializado" });
   }
 
-  const COUPLE_ID = process.env.VITE_COUPLE_ID ?? "arthur-namorada-2026";
   const db        = getFirestore();
   const rawBody   = (req.body ?? {}) as Record<string, unknown>;
 
+  const groupId = (req.query.groupId as string) || (rawBody.groupId as string);
+  if (!groupId) {
+    return res.status(400).json({ error: "Missing groupId" });
+  }
+
   try {
-    const result = await processApplePayEvent(db, COUPLE_ID, rawBody);
+    const result = await processApplePayEvent(db, groupId, rawBody);
 
     // Alert FCM apenas em falhas reais (não duplicatas nem warnings de idempotência)
     if (result.fallback) {
       await sendCriticalAlert(
         db,
-        COUPLE_ID,
+        groupId,
         `Compra Apple Pay com valor irrecuperável. Motivo: "${result.reason}". Verifique a aba Pendentes.`
       );
     }
@@ -454,7 +461,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       await sendCriticalAlert(
         db,
-        COUPLE_ID,
+        groupId,
         "Falha crítica ao registrar compra no Apple Pay. Verifique o sistema."
       );
     } catch {
