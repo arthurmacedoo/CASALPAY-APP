@@ -16,47 +16,44 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
   onCopyPix,
   copied,
 }) => {
-  const {
-    netBalance,
-  } = balance;
-
+  const { obligations } = balance;
   const { members, currentMember } = useGroupContext();
 
-  const isEven = netBalance === 0;
-  const isAdmin = currentMember?.role === "admin";
-  const adminOwes = netBalance < 0; // Admin should pay
-  const adminReceives = netBalance > 0; // Admin should receive
+  const myDebts = obligations.filter((o) => o.fromUid === currentMember?.userId);
+  const myCredits = obligations.filter((o) => o.toUid === currentMember?.userId);
 
-  // Find the other member (assuming 2 members)
-  const otherMember = members.find(m => m.userId !== currentMember?.userId);
-  const otherName = otherMember ? otherMember.name.split(' ')[0] : "Parceiro(a)";
+  const isEven = myDebts.length === 0 && myCredits.length === 0;
+  const hasDebts = myDebts.length > 0;
+  const hasCredits = myCredits.length > 0;
 
-  // Zara is originally the partner. If I am admin (Arthur), Zara owes = adminReceives
-  // Let's abstract this dynamically:
-  const iOwe = isAdmin ? adminOwes : adminReceives;
-  const otherOwes = isAdmin ? adminReceives : adminOwes;
-
-  const colorClass = isEven
-    ? "text-accent-green"
-    : otherOwes
-    ? "text-accent-pink"
-    : "text-accent-blue";
-
-  const glowClass = isEven
-    ? "shadow-[0_0_30px_rgba(74,222,128,0.12)]"
-    : otherOwes
-    ? "shadow-glow"
-    : "shadow-glow-blue";
-
-  const borderClass = isEven
-    ? "border-accent-green/30"
-    : otherOwes
-    ? "border-accent-pink/30"
-    : "border-accent-blue/30";
-
+  let colorClass = "text-text-primary";
+  let borderClass = "border-border";
+  let glowClass = "shadow-lg";
+  let icon = "✅";
   let statusMessage = "Tudo certo por enquanto 🙌";
-  if (!isEven) {
-    statusMessage = iOwe ? `Você deve a ${otherName}` : `${otherName} te deve`;
+
+  if (isEven) {
+    colorClass = "text-accent-green";
+    borderClass = "border-accent-green/30";
+    glowClass = "shadow-[0_0_30px_rgba(74,222,128,0.12)]";
+  } else if (hasDebts && !hasCredits) {
+    colorClass = "text-accent-pink";
+    borderClass = "border-accent-pink/30";
+    glowClass = "shadow-glow";
+    icon = "💸";
+    statusMessage = myDebts.length === 1 ? "Você tem um Pix a fazer" : "Você possui acertos pendentes";
+  } else if (hasCredits && !hasDebts) {
+    colorClass = "text-accent-blue";
+    borderClass = "border-accent-blue/30";
+    glowClass = "shadow-glow-blue";
+    icon = "💰";
+    statusMessage = myCredits.length === 1 ? "Você tem um Pix a receber" : "Você tem valores a receber";
+  } else {
+    colorClass = "text-text-primary";
+    borderClass = "border-border-light";
+    glowClass = "shadow-lg";
+    icon = "⚖️";
+    statusMessage = "Acertos cruzados pendentes";
   }
 
   const monthLabel = formatMonthLabel(monthKey);
@@ -76,27 +73,37 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
           </p>
         </div>
         <div className="w-10 h-10 rounded-2xl bg-bg-elevated flex items-center justify-center text-xl">
-          {isEven ? "✅" : otherOwes ? "💖" : "💙"}
+          {icon}
         </div>
       </div>
 
-      {/* Valor principal */}
+      {/* Lista de Liquidações */}
       {isEven ? (
-        <div className={`text-4xl font-bold ${colorClass} mb-1`}>
+        <div className={`text-4xl font-bold ${colorClass} mb-6`}>
           Zerado!
         </div>
       ) : (
-        <div className={`text-4xl font-bold ${colorClass} mb-1 tabular-nums`}>
-          {formatBRL(Math.abs(netBalance))}
+        <div className="flex flex-col gap-3 mb-6 mt-2">
+           {myDebts.map((debt) => {
+              const toMember = members.find((m) => m.userId === debt.toUid);
+              return (
+                 <div key={`debt-${debt.toUid}`} className="flex justify-between items-center bg-accent-pink/10 p-3.5 rounded-xl border border-accent-pink/20">
+                    <span className="text-sm font-medium text-accent-pink/90">Você deve a {toMember?.name.split(' ')[0] ?? 'Membro'}</span>
+                    <span className="text-xl font-bold text-accent-pink tabular-nums">{formatBRL(debt.amount)}</span>
+                 </div>
+              );
+           })}
+           {myCredits.map((credit) => {
+              const fromMember = members.find((m) => m.userId === credit.fromUid);
+              return (
+                 <div key={`credit-${credit.fromUid}`} className="flex justify-between items-center bg-accent-blue/10 p-3.5 rounded-xl border border-accent-blue/20">
+                    <span className="text-sm font-medium text-accent-blue/90">{fromMember?.name.split(' ')[0] ?? 'Membro'} te deve</span>
+                    <span className="text-xl font-bold text-accent-blue tabular-nums">{formatBRL(credit.amount)}</span>
+                 </div>
+              );
+           })}
         </div>
       )}
-
-      {/* Subtítulo */}
-      <p className="text-sm text-text-muted mb-5">
-        {isEven
-          ? "Nenhum Pix necessário este mês 🎉"
-          : "Valor líquido a pagar no Pix"}
-      </p>
 
       {/* Botão copiar resumo Pix */}
       <button
@@ -109,7 +116,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
               : "bg-bg-elevated border-border text-text-secondary hover:border-border-light"
           }`}
       >
-        {copied ? "✓ Copiado!" : "📋 Copiar resumo do Pix"}
+        {copied ? "✓ Copiado!" : "📋 Copiar resumo do Pix do Grupo"}
       </button>
     </div>
   );

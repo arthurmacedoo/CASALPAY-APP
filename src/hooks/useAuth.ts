@@ -10,7 +10,7 @@ import {
   browserSessionPersistence
 } from "firebase/auth";
 import type { User } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp, collection, query, where, getDocs, writeBatch } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
 
 interface UseAuthReturn {
@@ -21,6 +21,7 @@ interface UseAuthReturn {
   unauthorizedReason: string | null;
   login: (email: string, pass: string, remember?: boolean) => Promise<void>;
   register: (name: string, email: string, pass: string, remember?: boolean) => Promise<void>;
+  updateUserName: (newName: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -106,6 +107,39 @@ export function useAuth(): UseAuthReturn {
     }
   };
 
+  const updateUserName = async (newName: string) => {
+    if (!user) throw new Error("Usuário não autenticado");
+    const nameStr = newName.trim();
+    if (!nameStr) throw new Error("O nome não pode estar vazio");
+
+    // 1. Atualiza no Auth
+    await updateProfile(user, { displayName: nameStr });
+    setUser({ ...user, displayName: nameStr } as User); // Força atualização local
+
+    // 2. Prepara atualização em lote (Batch)
+    const batch = writeBatch(db);
+
+    // Atualiza no documento do usuário
+    batch.update(doc(db, 'users', user.uid), { 
+      name: nameStr,
+      updatedAt: serverTimestamp()
+    });
+
+    // 3. Encontra todos os grupos que o usuário participa e atualiza o membro
+    const q = query(collection(db, 'groups'), where('memberIds', 'array-contains', user.uid));
+    const groupsSnap = await getDocs(q);
+    
+    groupsSnap.forEach((groupDoc) => {
+      const memberRef = doc(db, 'groups', groupDoc.id, 'members', user.uid);
+      batch.update(memberRef, { 
+        name: nameStr 
+      });
+    });
+
+    // Executa tudo de forma atômica
+    await batch.commit();
+  };
+
   const logout = async () => {
     console.log("Deslogando usuário...");
     await signOut(auth);
@@ -113,5 +147,5 @@ export function useAuth(): UseAuthReturn {
     setUnauthorizedReason(null);
   };
 
-  return { user, loading, error, isAuthorized, unauthorizedReason, login, register, logout };
+  return { user, loading, error, isAuthorized, unauthorizedReason, login, register, updateUserName, logout };
 }

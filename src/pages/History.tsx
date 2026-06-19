@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTransactions } from "../hooks/useTransactions";
-import { calculateBalance } from "../lib/calculations";
 import {
   getCurrentMonthKey,
   formatBRL,
@@ -65,11 +64,6 @@ export const HistoryPage: React.FC = () => {
     const lower = searchTerm.toLowerCase();
     return source.filter(t => t.description.toLowerCase().includes(lower));
   }, [sharedTransactions, invoiceTransactions, activeTab, searchTerm]);
-
-  const balance = useMemo(
-    () => calculateBalance(sharedTransactions, members),
-    [sharedTransactions, members]
-  );
 
   const handleEdit = (t: Transaction) => {
     navigate("/add", { state: { transaction: t } });
@@ -190,7 +184,7 @@ export const HistoryPage: React.FC = () => {
             <div className="flex gap-4 p-4 border border-border rounded-xl mb-4 bg-bg-elevated animate-fade-in-up">
               <div>
                 <p className="text-xs text-text-muted">Despesas ({sharedTransactions.filter(t => t.type === 'expense').length})</p>
-                <p className="font-medium text-text-primary">{formatBRL(calculateBalance(sharedTransactions, members).totalExpenses)}</p>
+                <p className="font-medium text-text-primary">{formatBRL(sharedTransactions.reduce((acc, t) => acc + (t.amount || 0), 0))}</p>
               </div>
             </div>
           ) : (
@@ -199,26 +193,6 @@ export const HistoryPage: React.FC = () => {
                 <p className="text-xs text-text-muted">Total da Fatura</p>
                 <p className="font-medium text-[#A855F7]">{formatBRL(Math.max(0, invoiceTotal))}</p>
               </div>
-            </div>
-          )}
-          {activeTab === "shared" && (
-            <div
-              className={`rounded-2xl p-3 text-center border ${
-                balance.netBalance === 0
-                  ? "bg-accent-green/10 border-accent-green/30"
-                  : balance.netBalance > 0
-                  ? "bg-accent-pink/10 border-accent-pink/30"
-                  : "bg-accent-blue/10 border-accent-blue/30"
-              }`}
-            >
-              <p className="text-xs text-text-muted mb-0.5">Saldo líquido</p>
-              <p className={`font-semibold ${balance.netBalance === 0 ? "text-text-primary" : balance.netBalance > 0 ? "text-accent-pink" : "text-accent-blue"}`}>
-                {balance.netBalance === 0 
-                ? "Tudo quitado" 
-                : balance.netBalance > 0 
-                ? `Alguém deve ${formatBRL(balance.netBalance)}`
-                : `Você deve ${formatBRL(Math.abs(balance.netBalance))}`}
-              </p>
             </div>
           )}
         </div>

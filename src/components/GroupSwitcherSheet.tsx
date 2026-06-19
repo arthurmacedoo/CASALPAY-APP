@@ -7,7 +7,7 @@
  * Etapa 2: mostra apenas o grupo atual com check.
  * Etapa 3+: listará outros grupos e oferecerá "Criar grupo" / "Entrar por convite".
  */
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useGroupContext } from "../contexts/GroupContext";
 import { useAuthContext } from "../contexts/AuthContext";
@@ -36,7 +36,6 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
   const { group, members, loading: activeLoading, switchGroup, createGroup, joinGroup, currentMember, removeMember } = useGroupContext();
   const { user } = useAuthContext();
   const { groups: userGroups, loading: groupsLoading } = useUserGroups(user);
-  const sheetRef = useRef<HTMLDivElement>(null);
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showJoinForm, setShowJoinForm] = useState(false);
@@ -85,11 +84,6 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
     }
   };
 
-  // Fecha ao clicar fora do sheet
-  const handleOverlayClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) onClose();
-  };
-
   // Fecha com Escape
   useEffect(() => {
     if (!isOpen) return;
@@ -117,27 +111,23 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex flex-col justify-end"
-      style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
-      onClick={handleOverlayClick}
+      className="fixed inset-0 z-50 flex flex-col bg-bg-card animate-slide-left"
     >
-      {/* Sheet */}
-      <div
-        ref={sheetRef}
-        className="
-          bg-bg-card rounded-t-3xl border-t border-border
-          px-5 pt-3 pb-10
-          animate-slide-up
-          max-h-[85vh] overflow-y-auto
-        "
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Drag handle */}
-        <div className="flex justify-center mb-5">
-          <div className="w-10 h-1 rounded-full bg-border" />
-        </div>
+      {/* ── Cabeçalho do modal tela cheia ── */}
+      <div className="safe-top bg-bg-card border-b border-border/50 px-5 py-4 flex items-center justify-between sticky top-0 z-10">
+        <h2 className="text-xl font-bold text-text-primary tracking-tight">Meus Grupos</h2>
+        <button 
+          onClick={onClose} 
+          className="p-2 -mr-2 bg-bg-elevated/50 hover:bg-bg-elevated rounded-full text-text-muted hover:text-text-primary transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
 
-        {/* Título */}
+      <div className="flex-1 overflow-y-auto px-5 pt-6 pb-20 safe-bottom">
+        {/* Título da seção */}
         <p className="text-xs font-semibold text-text-muted uppercase tracking-widest mb-3 px-1">
           Seus grupos
         </p>

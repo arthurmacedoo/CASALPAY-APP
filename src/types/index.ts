@@ -194,6 +194,12 @@ export type TransactionFormData = ExpenseFormData | SettlementFormData;
 
 // ─── Resumo financeiro dinâmico do mês ───────────────────────────────────────
 
+export interface SettlementObligation {
+  fromUid: string;
+  toUid: string;
+  amount: number;
+}
+
 export interface BalanceSummary {
   /** Total de despesas pagas por cada membro. Chave = userId */
   memberExpenses: Record<string, number>;
@@ -215,4 +221,6 @@ export interface BalanceSummary {
   netBalance: number;
   /** UID do admin do grupo (âncora do sinal do netBalance) */
   adminUid: string | null;
+  /** Lista de transferências necessárias para zerar as dívidas do grupo */
+  obligations: SettlementObligation[];
 }

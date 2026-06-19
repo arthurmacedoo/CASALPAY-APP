@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useGroupContext } from "../contexts/GroupContext";
 import { useAuthContext } from "../contexts/AuthContext";
+import toast from "react-hot-toast";
 
 interface GroupSettingsSheetProps {
   isOpen: boolean;
@@ -10,15 +11,22 @@ interface GroupSettingsSheetProps {
 
 export const GroupSettingsSheet: React.FC<GroupSettingsSheetProps> = ({ isOpen, onClose }) => {
   const { group, isCurrentUserAdmin, updateGroup, deleteGroup } = useGroupContext();
-  const { logout } = useAuthContext();
+  const { user, logout, updateUserName } = useAuthContext();
   
   const [name, setName] = useState(group?.name ?? "");
   const [saving, setSaving] = useState(false);
+  
+  const [userName, setUserName] = useState(user?.displayName ?? "");
+  const [savingName, setSavingName] = useState(false);
+
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    if (isOpen) setName(group?.name ?? "");
-  }, [isOpen, group?.name]);
+    if (isOpen) {
+      setName(group?.name ?? "");
+      setUserName(user?.displayName ?? "");
+    }
+  }, [isOpen, group?.name, user?.displayName]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -31,13 +39,28 @@ export const GroupSettingsSheet: React.FC<GroupSettingsSheetProps> = ({ isOpen, 
   const isCustomGroup = isCurrentUserAdmin;
 
   const handleSave = async () => {
-    if (!name.trim() || name === group?.name) { onClose(); return; }
+    if (!name.trim() || name === group?.name) { return; }
     setSaving(true);
     try {
       await updateGroup(name);
-      onClose();
+      toast.success("Nome do grupo atualizado!");
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao atualizar grupo.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveName = async () => {
+    if (!userName.trim() || userName === user?.displayName) return;
+    setSavingName(true);
+    try {
+      await updateUserName(userName);
+      toast.success("Seu nome foi atualizado com sucesso!");
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao atualizar seu nome.");
+    } finally {
+      setSavingName(false);
     }
   };
 
@@ -112,6 +135,22 @@ export const GroupSettingsSheet: React.FC<GroupSettingsSheetProps> = ({ isOpen, 
         <section className={`flex flex-col gap-3 ${isCustomGroup ? 'pt-6 border-t border-border mt-2' : ''}`}>
           <label className="text-xs font-semibold text-text-muted uppercase tracking-widest pl-1">Sua Conta</label>
           
+          <div className="flex flex-col gap-2 mb-4">
+            <p className="text-xs text-text-muted pl-1">Como você aparece para os outros membros</p>
+            <input 
+              type="text" 
+              value={userName} 
+              onChange={(e) => setUserName(e.target.value)} 
+              placeholder="Seu nome"
+              className="w-full bg-bg-elevated border border-border rounded-xl px-4 py-4 text-sm text-text-primary focus:outline-none focus:border-accent-blue transition-colors"
+            />
+            {userName !== user?.displayName && userName.trim() !== "" && (
+              <button onClick={handleSaveName} disabled={savingName} className="mt-1 py-3.5 rounded-xl bg-accent-blue text-white text-sm font-semibold hover:bg-accent-blue/90 transition-colors disabled:opacity-50">
+                {savingName ? 'Salvando...' : 'Atualizar Meu Nome'}
+              </button>
+            )}
+          </div>
+
           <button 
             onClick={() => { onClose(); logout(); }} 
             className="w-full py-4 rounded-xl bg-bg-elevated text-text-secondary border border-border text-sm font-semibold hover:bg-white/5 transition-colors"

@@ -11,6 +11,7 @@ interface UseAuthReturn {
   unauthorizedReason: string | null;
   login: (email: string, pass: string, remember?: boolean) => Promise<void>;
   register: (name: string, email: string, pass: string, remember?: boolean) => Promise<void>;
+  updateUserName: (newName: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 

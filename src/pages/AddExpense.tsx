@@ -158,16 +158,23 @@ export const AddExpensePage: React.FC = () => {
       newErrors.date = "Informe a data";
     }
 
-    if (
-      form.type === "settlement" &&
-      form.fromUserId === form.toUserId
-    ) {
-      newErrors.type = "Remetente e destinatário não podem ser iguais";
+    if (form.type === "settlement") {
+      if (!form.toUserId) {
+        newErrors.type = "Selecione o destinatário do Pix";
+      } else if (form.fromUserId === form.toUserId) {
+        newErrors.type = "Remetente e destinatário não podem ser iguais";
+      }
     }
 
     if (isPersonalSplitForm(form) && !form.personalOwnerUserId) {
       newErrors.personalOwnerUserId =
         "Selecione a quem pertence este gasto pessoal";
+    }
+
+    if (form.type === "expense" && form.splitMode === "equal") {
+      if (!form.splitBetweenUserIds || form.splitBetweenUserIds.length === 0) {
+        newErrors.type = "Selecione pelo menos uma pessoa para dividir";
+      }
     }
 
     setErrors(newErrors);
@@ -241,7 +248,6 @@ export const AddExpensePage: React.FC = () => {
   };
 
   const isExpense = form.type === "expense";
-  const showOwnerPicker = isPersonalSplitForm(form);
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -349,11 +355,16 @@ export const AddExpensePage: React.FC = () => {
                 role="switch"
                 aria-checked={form.type === "expense" ? (form.isInstallment ?? false) : false}
                 onClick={() =>
-                  setForm((f) =>
-                    f.type === "expense"
-                      ? { ...f, isInstallment: !f.isInstallment }
-                      : f
-                  )
+                  setForm((f) => {
+                    if (f.type !== "expense") return f;
+                    const nextIsInstallment = !f.isInstallment;
+                    return { 
+                      ...f, 
+                      isInstallment: nextIsInstallment,
+                      splitMode: nextIsInstallment ? "personal" : f.splitMode,
+                      personalOwnerUserId: nextIsInstallment ? f.personalOwnerUserId : f.personalOwnerUserId
+                    };
+                  })
                 }
                 className={`relative inline-flex h-6 w-12 items-center rounded-full transition-colors ${
                   form.type === "expense" && form.isInstallment
@@ -473,20 +484,20 @@ export const AddExpensePage: React.FC = () => {
                       setForm((f) =>
                         f.type === "expense"
                           ? {
-                              ...f,
-                              splitMode: "equal",
-                              splitBetweenUserIds: memberIds,
-                              personalOwnerUserId: null,
-                            }
-                          : f
-                      )
-                    }
-                    className={`chip text-xs active:scale-95 transition-all ${
-                      form.splitMode === "equal" ? "chip-selected-green" : ""
-                    }`}
-                  >
-                    ⚖️ Meio a Meio
-                  </button>
+                            ...f,
+                            splitMode: "equal",
+                            splitBetweenUserIds: f.splitBetweenUserIds?.length ? f.splitBetweenUserIds : memberIds,
+                            personalOwnerUserId: null,
+                          }
+                        : f
+                    )
+                  }
+                  className={`chip text-xs active:scale-95 transition-all duration-300 ease-in-out ${
+                    form.splitMode === "equal" ? "chip-selected-green" : ""
+                  }`}
+                >
+                  ⚖️ Rateio
+                </button>
                   <button
                     type="button"
                     onClick={() =>
@@ -500,12 +511,97 @@ export const AddExpensePage: React.FC = () => {
                           : f
                       )
                     }
-                    className={`chip text-xs active:scale-95 transition-all ${
+                    className={`chip text-xs active:scale-95 transition-all duration-300 ease-in-out ${
                       form.splitMode === "personal" ? "chip-selected-pink" : ""
                     }`}
                   >
                     💳 Só de um
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* Novo selecionador dinâmico: Só de um */}
+            {form.type === "expense" && form.splitMode === "personal" && (
+              <div className="animate-fade-in-up flex flex-col gap-3 bg-bg-elevated p-4 rounded-xl border border-border mt-1">
+                <div className="flex flex-col gap-1 mb-1">
+                  <p className="text-sm font-semibold text-text-primary">A quem pertence este gasto pessoal?</p>
+                  {form.isInstallment ? (
+                    <p className="text-xs text-text-muted leading-relaxed">
+                      Para manter a contabilidade do grupo íntegra no longo prazo, compras parceladas não podem ser rateadas mensalmente. Elas ficam na fatura individual de apenas <b>um membro responsável</b>.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-text-muted">Vai aparecer só na fatura do membro selecionado.</p>
+                  )}
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {members.map((m) => {
+                    const isOwner = form.personalOwnerUserId === m.userId;
+                    return (
+                      <button
+                        key={m.userId}
+                        type="button"
+                        onClick={() =>
+                          setForm((f) =>
+                            f.type === "expense"
+                              ? { ...f, personalOwnerUserId: m.userId }
+                              : f
+                          )
+                        }
+                        className={`chip transition-all duration-300 ease-in-out ${
+                          isOwner
+                            ? "bg-rose-500/20 border-rose-500 text-rose-400"
+                            : ""
+                        }`}
+                      >
+                        👤 {m.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Selecionador de Rateio: Meio a Meio */}
+            {form.type === "expense" && form.splitMode === "equal" && !form.isInstallment && (
+              <div className="animate-fade-in-up flex flex-col gap-3 bg-bg-elevated p-4 rounded-xl border border-border mt-1">
+                <div className="flex flex-col gap-1 mb-1">
+                  <p className="text-sm font-semibold text-text-primary">Quem vai dividir essa conta?</p>
+                  <p className="text-xs text-text-muted">A despesa será dividida igualmente entre os selecionados.</p>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {members.map((m) => {
+                    const isSelected = form.splitBetweenUserIds?.includes(m.userId);
+                    return (
+                      <button
+                        key={m.userId}
+                        type="button"
+                        onClick={() => {
+                          setForm((prev) => {
+                            if (prev.type !== "expense") return prev;
+                            const currentList = prev.splitBetweenUserIds || [];
+                            const alreadyInList = currentList.includes(m.userId);
+                            let newList;
+                            if (alreadyInList) {
+                               // Não deixa ficar vazio
+                               if (currentList.length === 1) return prev;
+                               newList = currentList.filter(id => id !== m.userId);
+                            } else {
+                               newList = [...currentList, m.userId];
+                            }
+                            return { ...prev, splitBetweenUserIds: newList };
+                          });
+                        }}
+                        className={`chip transition-all duration-300 ease-in-out ${
+                          isSelected
+                            ? "bg-emerald-500/20 border-emerald-500 text-emerald-400"
+                            : ""
+                        }`}
+                      >
+                        👤 {m.name}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -522,25 +618,27 @@ export const AddExpensePage: React.FC = () => {
               <div className="flex gap-2 flex-wrap">
                 {members.map((m) => {
                   const isSelected = form.fromUserId === m.userId;
-                  const isOther = form.toUserId === m.userId;
                   return (
                     <button
                       key={m.userId}
                       type="button"
                       onClick={() => {
-                        const otherUid =
-                          members.find((x) => x.userId !== m.userId)?.userId ?? "";
-                        setForm((f) =>
-                          f.type === "settlement"
-                            ? { ...f, fromUserId: m.userId, toUserId: otherUid }
-                            : f
-                        );
+                        setForm((prev) => {
+                          if (prev.type !== "settlement") return prev;
+                          // Regra Crucial: Remetente não pode ser igual a Destinatário.
+                          // Se esse membro já for o destinatário, resetamos o destinatário.
+                          const newToUserId = prev.toUserId === m.userId ? "" : prev.toUserId;
+                          return { 
+                             ...prev, 
+                             fromUserId: m.userId, 
+                             toUserId: newToUserId,
+                             personalOwnerUserId: prev.isPersonalInvoice && newToUserId ? newToUserId : prev.personalOwnerUserId 
+                          };
+                        });
                       }}
-                      className={`chip ${
+                      className={`chip transition-all duration-300 ease-in-out ${
                         isSelected
-                          ? "chip-selected-blue"
-                          : isOther
-                          ? "chip-selected-pink"
+                          ? "bg-violet-500/20 border-violet-400 text-violet-300"
                           : ""
                       }`}
                     >
@@ -549,13 +647,45 @@ export const AddExpensePage: React.FC = () => {
                   );
                 })}
               </div>
-              {form.type === "settlement" && (
-                <p className="text-xs text-text-muted">
-                  Destino:{" "}
-                  {members.find((m) => m.userId === form.toUserId)?.name ??
-                    "—"}
-                </p>
-              )}
+            </div>
+
+            <div className="flex flex-col gap-2 mt-2">
+              <p className="text-sm font-medium text-text-secondary">
+                Quem recebeu o Pix?
+              </p>
+              <div className="flex gap-2 flex-wrap">
+                {members.map((m) => {
+                  const isSelected = form.toUserId === m.userId;
+                  const isDisabled = form.fromUserId === m.userId; // Remetente não pode ser destinatário
+                  return (
+                    <button
+                      key={m.userId}
+                      type="button"
+                      disabled={isDisabled}
+                      onClick={() => {
+                        setForm((prev) =>
+                          prev.type === "settlement"
+                            ? { 
+                                ...prev, 
+                                toUserId: m.userId,
+                                personalOwnerUserId: prev.isPersonalInvoice ? m.userId : prev.personalOwnerUserId
+                              }
+                            : prev
+                        );
+                      }}
+                      className={`chip transition-all duration-300 ease-in-out ${
+                        isSelected
+                          ? "bg-violet-500/20 border-violet-400 text-violet-300"
+                          : isDisabled
+                          ? "opacity-30 cursor-not-allowed border-transparent bg-transparent text-text-muted"
+                          : ""
+                      }`}
+                    >
+                      👤 {m.name}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="flex flex-col gap-2">
@@ -608,42 +738,6 @@ export const AddExpensePage: React.FC = () => {
               </div>
             </div>
           </>
-        )}
-
-        {/* ── SELETOR DE DONO (gasto pessoal) ──────────────────────────────── */}
-        {showOwnerPicker && (
-          <div className="animate-fade-in-up flex flex-col gap-2 bg-bg-elevated border border-border rounded-xl p-4">
-            <p className="text-sm font-semibold text-text-primary">
-              A quem pertence este gasto pessoal?
-            </p>
-            <p className="text-xs text-text-muted mb-1">
-              Vai aparecer só na fatura do membro selecionado.
-            </p>
-            <div className="flex gap-2 flex-wrap">
-              {members.map((m) => {
-                const isSelected = form.personalOwnerUserId === m.userId;
-                return (
-                  <button
-                    key={m.userId}
-                    type="button"
-                    onClick={() =>
-                      setForm((f) => ({ ...f, personalOwnerUserId: m.userId }))
-                    }
-                    className={`chip active:scale-95 transition-all ${
-                      isSelected ? "chip-selected-pink" : ""
-                    }`}
-                  >
-                    👤 {m.name}
-                  </button>
-                );
-              })}
-            </div>
-            {errors.personalOwnerUserId && (
-              <p className="text-accent-red text-xs mt-1">
-                {errors.personalOwnerUserId}
-              </p>
-            )}
-          </div>
         )}
 
         {/* Data */}

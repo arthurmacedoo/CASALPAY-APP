@@ -1,9 +1,10 @@
 import type {
-  BalanceSummary,
-  ExpenseTransaction,
-  SettlementTransaction,
   Transaction,
   GroupMember,
+  BalanceSummary,
+  SettlementObligation,
+  ExpenseTransaction,
+  SettlementTransaction,
 } from "../types";
 
 // ─── Runtime Mapping (Opção B) ────────────────────────────────────────────────
@@ -111,7 +112,50 @@ function addToMap(map: Record<string, number>, uid: string, value: number): void
   map[uid] = (map[uid] ?? 0) + value;
 }
 
-// ─── Motor principal ──────────────────────────────────────────────────────────
+// ─── Motor principal e Algoritmo de Dívidas ───────────────────────────────────
+
+function computeOptimalSettlements(balances: Record<string, number>): SettlementObligation[] {
+  const debtors: { uid: string; amount: number }[] = [];
+  const creditors: { uid: string; amount: number }[] = [];
+
+  for (const [uid, balance] of Object.entries(balances)) {
+    if (balance < 0) debtors.push({ uid, amount: -balance });
+    else if (balance > 0) creditors.push({ uid, amount: balance });
+  }
+
+  // Ordena do maior pro menor para minimizar transações
+  debtors.sort((a, b) => b.amount - a.amount);
+  creditors.sort((a, b) => b.amount - a.amount);
+
+  const obligations: SettlementObligation[] = [];
+  let d = 0;
+  let c = 0;
+
+  while (d < debtors.length && c < creditors.length) {
+    const debtor = debtors[d];
+    const creditor = creditors[c];
+    
+    // Ignora pequenos resíduos de arredondamento (ex: 1 centavo)
+    if (debtor.amount === 0) { d++; continue; }
+    if (creditor.amount === 0) { c++; continue; }
+
+    const settled = Math.min(debtor.amount, creditor.amount);
+    
+    obligations.push({
+      fromUid: debtor.uid,
+      toUid: creditor.uid,
+      amount: settled
+    });
+
+    debtor.amount -= settled;
+    creditor.amount -= settled;
+
+    if (debtor.amount === 0) d++;
+    if (creditor.amount === 0) c++;
+  }
+
+  return obligations;
+}
 
 /**
  * Calcula o resumo financeiro do mês de forma 100% dinâmica por UID.
@@ -191,6 +235,8 @@ export function calculateBalance(
   // Positivo = admin deve receber; Negativo = admin deve pagar.
   const netBalance = adminUid ? (memberBalances[adminUid] ?? 0) : 0;
 
+  const obligations = computeOptimalSettlements(memberBalances);
+
   return {
     memberExpenses,
     memberSettlements,
@@ -200,6 +246,7 @@ export function calculateBalance(
     settlementCount,
     netBalance,
     adminUid,
+    obligations,
   };
 }
 
@@ -214,23 +261,20 @@ export function generatePixSummary(
   monthLabel: string,
   members: GroupMember[]
 ): string {
-  if (balance.netBalance === 0) {
+  if (balance.obligations.length === 0) {
     return `CasalPay — ${monthLabel}: Zerado! Nenhum Pix necessário ✅`;
   }
 
-  const abs = formatCentsToBRL(Math.abs(balance.netBalance));
-  const adminMember = members.find((m) => m.userId === balance.adminUid);
-  const otherMember = members.find((m) => m.userId !== balance.adminUid);
+  let text = `CasalPay — ${monthLabel}:\n`;
 
-  const adminName = adminMember?.name ?? "Admin";
-  const otherName = otherMember?.name ?? "Parceiro(a)";
+  balance.obligations.forEach((obs) => {
+    const fromName = members.find((m) => m.userId === obs.fromUid)?.name.split(' ')[0] ?? "Membro";
+    const toName = members.find((m) => m.userId === obs.toUid)?.name.split(' ')[0] ?? "Membro";
+    const amountStr = formatCentsToBRL(obs.amount);
+    text += `💸 ${fromName} deve R$ ${amountStr} para ${toName}\n`;
+  });
 
-  if (balance.netBalance > 0) {
-    // Admin deve receber → o outro deve ao admin
-    return `CasalPay — ${monthLabel}: ${otherName} deve R$ ${abs} para ${adminName} 💙`;
-  }
-  // Admin deve pagar → admin deve ao outro
-  return `CasalPay — ${monthLabel}: ${adminName} deve R$ ${abs} para ${otherName} 🩷`;
+  return text.trim();
 }
 
 function formatCentsToBRL(cents: number): string {
