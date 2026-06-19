@@ -38,10 +38,8 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
       const owner = members.find(m => m.userId === transaction.personalOwnerUserId);
       avatarInitial = owner?.name.charAt(0).toUpperCase() || "👤";
     } else {
-      const adminUid = resolveAdminUid(members);
-      const memberUid = resolveMemberUid(members);
-      const payerUid = resolvePaidByUid(transaction as ExpenseTransaction, adminUid, memberUid);
-      const payer = members.find(m => m.userId === payerUid) || members[0];
+      const payerId = (transaction as ExpenseTransaction).paidByUserId;
+      const payer = members.find(m => m.userId === payerId);
       if (payer) {
         avatarInitial = payer.name.charAt(0).toUpperCase();
       } else {
@@ -149,13 +147,12 @@ const ExpenseDetails: React.FC<{ transaction: ExpenseTransaction, members: any[]
   const debt = calculateExpenseDebt(transaction, members);
   const isNobodyOwes = debt === 0;
 
-  const adminUid = resolveAdminUid(members);
-  const memberUid = resolveMemberUid(members);
-  const payerUid = resolvePaidByUid(transaction, adminUid, memberUid);
-  const payer = members.find(m => m.userId === payerUid);
+  const payerId = transaction.paidByUserId;
+  const payer = members.find(m => m.userId === payerId);
   const payerName = payer ? payer.name.split(' ')[0] : "Membro";
 
-  const paidByColor = transaction.paidBy === "owner" || (adminUid && payerUid === adminUid) ? "text-accent-blue" : "text-accent-pink";
+  const adminUid = resolveAdminUid(members);
+  const paidByColor = (adminUid && payerId === adminUid) ? "text-accent-blue" : "text-accent-pink";
   const debtColor = isNobodyOwes ? "text-text-muted" : "text-accent-pink";
   
   const debtText = isNobodyOwes
@@ -178,13 +175,12 @@ const ExpenseDetails: React.FC<{ transaction: ExpenseTransaction, members: any[]
 const SettlementDetails: React.FC<{ transaction: SettlementTransaction, members: any[] }> = ({ transaction, members }) => {
   const effect = calculateSettlementEffect(transaction);
   
-  const adminUid = resolveAdminUid(members);
-  const memberUid = resolveMemberUid(members);
-  const { fromUid } = resolveSettlementUids(transaction, adminUid, memberUid);
-  const sender = members.find(m => m.userId === fromUid);
+  const fromId = transaction.fromUserId;
+  const sender = members.find(m => m.userId === fromId);
   const senderName = sender ? sender.name.split(' ')[0] : "Membro";
 
-  const fromColor = transaction.from === "owner" || (adminUid && fromUid === adminUid) ? "text-accent-blue" : "text-accent-pink";
+  const adminUid = resolveAdminUid(members);
+  const fromColor = (adminUid && fromId === adminUid) ? "text-accent-blue" : "text-accent-pink";
   const effectText = effect > 0 
     ? `Reduziu dívida` 
     : `Reduziu dívida`;

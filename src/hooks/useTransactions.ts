@@ -72,63 +72,72 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
             const adminMember = members.find(m => m.role === "admin");
             const partnerMember = members.find(m => m.role === "member");
             
-            if (data.type === "expense") {
-              const splitType = (data.splitType || "").toLowerCase();
-              const pb = (data.paidBy || "").toLowerCase();
+            if (!partnerMember) {
+              return data; // Parada de execução segura
+            }
+            
+            const splitType = (data.splitType || "").toLowerCase();
+            const pb = (data.paidBy || "").toLowerCase();
+            const pd = (data.pixDestination || "").toLowerCase();
+            const fr = (data.from || "").toLowerCase();
+            const toStr = (data.to || "").toLowerCase();
 
-              // 1. Injetar visibility e personalOwnerUserId
-              if (!data.visibility) {
-                if (splitType === "100% partner" || splitType === "100% zara" || splitType === "100% namorada") {
-                  data.visibility = "personal";
-                  if (partnerMember) data.personalOwnerUserId = partnerMember.userId;
-                } else if (splitType === "100% owner" || splitType === "100% arthur") {
-                  data.visibility = "personal";
-                  if (adminMember) data.personalOwnerUserId = adminMember.userId;
-                } else if (splitType === "gasto pessoal") {
-                  data.visibility = "personal";
-                  if (pb === "owner" || pb === "arthur") {
-                    if (adminMember) data.personalOwnerUserId = adminMember.userId;
-                  } else if (pb === "partner" || pb === "zara" || pb === "namorada") {
-                    if (partnerMember) data.personalOwnerUserId = partnerMember.userId;
-                  }
-                } else {
-                  data.visibility = "shared";
-                }
+            // Identificação Agressiva de Gastos da Parceira (Zara)
+            const isPartnerExpense = 
+              splitType.includes("partner") || 
+              splitType.includes("zara") || 
+              splitType.includes("namorada") || 
+              splitType.includes("gasto pessoal") ||
+              pd === "zara_card" ||
+              pb === "partner" ||
+              pb === "zara";
+
+            // Identificação de Gastos do Admin (Arthur)
+            const isAdminExpense = 
+              splitType.includes("owner") || 
+              splitType.includes("arthur") || 
+              splitType === "100% owner";
+
+            if (data.type === "expense") {
+              if (isPartnerExpense) {
+                data.visibility = "personal";
+                data.personalOwnerUserId = partnerMember.userId;
+              } else if (isAdminExpense) {
+                data.visibility = "personal";
+                data.personalOwnerUserId = adminMember?.userId || "";
+              } else {
+                data.visibility = "shared";
               }
 
-              // 2. Injetar paidByUserId
+              // Hidratação Correta do Pagador (paidByUserId)
               if (!data.paidByUserId) {
-                if (pb === "owner" || pb === "arthur") {
-                  if (adminMember) data.paidByUserId = adminMember.userId;
-                } else if (pb === "partner" || pb === "zara" || pb === "namorada") {
-                  if (partnerMember) data.paidByUserId = partnerMember.userId;
+                if (pb === "partner" || pb === "zara") {
+                  data.paidByUserId = partnerMember.userId;
+                } else if (pb === "owner" || pb === "arthur") {
+                  data.paidByUserId = adminMember?.userId || "";
                 }
               }
             } else if (data.type === "settlement") {
-              if (!data.visibility) {
-                if (data.pixDestination === "zara_card") {
-                  data.visibility = "personal";
-                  if (partnerMember) data.personalOwnerUserId = partnerMember.userId;
-                } else {
-                  data.visibility = "shared";
-                }
+              if (pd === "zara_card") {
+                data.visibility = "personal";
+                data.personalOwnerUserId = partnerMember.userId;
+              } else {
+                data.visibility = "shared";
               }
               
               if (!data.fromUserId) {
-                const fr = (data.from || "").toLowerCase();
-                if (fr === "owner" || fr === "arthur") {
-                  if (adminMember) data.fromUserId = adminMember.userId;
-                } else if (fr === "partner" || fr === "zara" || fr === "namorada") {
-                  if (partnerMember) data.fromUserId = partnerMember.userId;
+                if (fr === "partner" || fr === "zara" || fr === "namorada") {
+                  data.fromUserId = partnerMember.userId;
+                } else if (fr === "owner" || fr === "arthur") {
+                  data.fromUserId = adminMember?.userId || "";
                 }
               }
               
               if (!data.toUserId) {
-                const to = (data.to || "").toLowerCase();
-                if (to === "owner" || to === "arthur") {
-                  if (adminMember) data.toUserId = adminMember.userId;
-                } else if (to === "partner" || to === "zara" || to === "namorada") {
-                  if (partnerMember) data.toUserId = partnerMember.userId;
+                if (toStr === "partner" || toStr === "zara" || toStr === "namorada") {
+                  data.toUserId = partnerMember.userId;
+                } else if (toStr === "owner" || toStr === "arthur") {
+                  data.toUserId = adminMember?.userId || "";
                 }
               }
             }
