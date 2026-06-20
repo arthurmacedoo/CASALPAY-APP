@@ -291,6 +291,8 @@ export type ProcessEventResult = {
   reason?: string;
   idempotent: boolean;
   warning?: string;
+  amountCents?: number;
+  description?: string;
 };
 
 /**
@@ -339,6 +341,8 @@ export async function processApplePayEvent(
       id:        fallbackId,
       reason,
       idempotent: Boolean(clientEventId),
+      amountCents: 0,
+      description: `fallback: ${reason}`,
     };
   }
 
@@ -389,6 +393,8 @@ export async function processApplePayEvent(
     ok:         true,
     id:         ref.id,
     idempotent: Boolean(clientEventId),
+    amountCents,
+    description,
   };
 
   if (!clientEventId) {
@@ -400,7 +406,15 @@ export async function processApplePayEvent(
 
 // ── Handler Principal ──────────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  const origin = req.headers.origin;
+  const allowedOrigins = ["https://casalpay.vercel.app"];
+  
+  if (origin && (allowedOrigins.includes(origin) || origin.startsWith("http://localhost:"))) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  } else {
+    res.setHeader("Access-Control-Allow-Origin", "https://casalpay.vercel.app");
+  }
+
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
@@ -438,20 +452,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Alert FCM apenas em falhas reais (não duplicatas nem warnings de idempotência)
     if (result.fallback) {
-      await sendCriticalAlert(
+      // Background (não usa await) para não travar o webhook
+      sendCriticalAlert(
         db,
         groupId,
         `Compra Apple Pay com valor irrecuperável. Motivo: "${result.reason}". Verifique a aba Pendentes.`
-      );
+      ).catch(console.error);
     }
 
     const httpStatus = result.ok
       ? (result.duplicate ? 200 : 201)
       : 200; // fallback retorna 200 (aceito com aviso)
 
-    return res.status(httpStatus).json({ ...result, amount: result.ok && !result.duplicate
-      ? undefined  // amount já vai no result quando necessário
-      : undefined,
+    return res.status(httpStatus).json({ 
+      ...result, 
+      amount: result.amountCents ? (result.amountCents / 100) : undefined
     });
 
   } catch (err: unknown) {
@@ -459,11 +474,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error("[webhook] Erro crítico de infraestrutura:", msg);
 
     try {
-      await sendCriticalAlert(
+      sendCriticalAlert(
         db,
         groupId,
         "Falha crítica ao registrar compra no Apple Pay. Verifique o sistema."
-      );
+      ).catch(() => {});
     } catch {
       // silencia
     }

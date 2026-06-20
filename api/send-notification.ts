@@ -36,14 +36,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: "Configuração do servidor incompleta." });
   }
 
-  // "target" é o nome do DESTINATÁRIO: "Arthur" ou "Zara"
-  const { target, title, message } = req.body ?? {};
+  const { target, title, message, groupId } = req.body ?? {};
 
   if (!target || !message) {
     return res.status(400).json({ error: "target e message são obrigatórios." });
   }
-
-  const COUPLE_ID = process.env.VITE_COUPLE_ID ?? "arthur-namorada-2026";
+  
+  if (!groupId) {
+    return res.status(400).json({ error: "groupId é obrigatório no SaaS." });
+  }
 
   try {
     const db = getFirestore();
@@ -51,8 +52,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Busca TODOS os tokens do destinatário (múltiplos dispositivos)
     const tokensSnap = await db
-      .collection("couples")
-      .doc(COUPLE_ID)
+      .collection("groups")
+      .doc(groupId)
       .collection("fcm_tokens")
       .where("user", "==", target)
       .get();
@@ -126,8 +127,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const docId = tokenMap.get(token);
           if (docId) {
             const docRef = db
-              .collection("couples")
-              .doc(COUPLE_ID)
+              .collection("groups")
+              .doc(groupId)
               .collection("fcm_tokens")
               .doc(docId);
             batch.delete(docRef);

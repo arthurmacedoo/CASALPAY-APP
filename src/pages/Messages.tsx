@@ -1,5 +1,6 @@
 import React, { useState, Component } from "react";
 import { useAuthContext } from "../contexts/AuthContext";
+import { useGroupContext } from "../contexts/GroupContext";
 import { useNotificationContext } from "../contexts/NotificationContext";
 import {
   OWNER_NAME,
@@ -77,6 +78,7 @@ class FcmErrorBoundary extends Component<
 // ─── Componente principal ──────────────────────────────────────────────────
 export const MessagesPage: React.FC = () => {
   const { user } = useAuthContext();
+  const { group } = useGroupContext();
   const { permission, requestPermission, pushStatus, pushError } = useNotificationContext();
   
   const [sending, setSending] = useState<string | null>(null);
@@ -103,6 +105,7 @@ export const MessagesPage: React.FC = () => {
           target:  targetName,
           title:   `${senderName}:`,
           message: `${msg.emoji} ${msg.text}`,
+          groupId: group?.id,
         }),
       });
 
