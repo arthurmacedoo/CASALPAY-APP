@@ -7,13 +7,11 @@
  * Etapa 2: mostra apenas o grupo atual com check.
  * Etapa 3+: listará outros grupos e oferecerá "Criar grupo" / "Entrar por convite".
  */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useGroupContext } from "../contexts/GroupContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import { useUserGroups } from "../hooks/useUserGroups";
-import { OWNER_NAME, PARTNER_NAME } from "../constants/couple";
-import { COUPLE_ID } from "../lib/firebase";
 import toast from "react-hot-toast";
 import type { GroupMember } from "../types";
 
@@ -22,10 +20,8 @@ interface GroupSwitcherSheetProps {
   onClose: () => void;
 }
 
-function getMemberEmoji(name: string): string {
-  const lower = name.toLowerCase();
-  if (lower.includes(OWNER_NAME.toLowerCase())) return "👨🏻";
-  if (lower.includes(PARTNER_NAME.toLowerCase())) return "👩🏻";
+function getMemberEmoji(): string {
+  // Returns a generic avatar emoji — can be extended later based on role
   return "👤";
 }
 
@@ -47,6 +43,7 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
   
   const [memberToRemove, setMemberToRemove] = useState<GroupMember | null>(null);
   const [removingMember, setRemovingMember] = useState(false);
+  const sheetRef = useRef<HTMLDivElement>(null);
 
   const handleRemoveMember = async () => {
     if (!memberToRemove) return;
@@ -189,7 +186,7 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
                       {gName}
                     </p>
                     <p className="text-xs text-text-muted mt-0.5">
-                      {g.id === COUPLE_ID ? "Grupo principal" : (g.memberIds?.length === 1 ? "1 membro" : `${g.memberIds?.length ?? 0} membros`)}
+                      {g.memberIds?.length === 1 ? "1 membro" : `${g.memberIds?.length ?? 0} membros`}
                     </p>
                   </div>
 
@@ -223,7 +220,7 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
                   >
                     {/* Avatar */}
                     <div className="w-8 h-8 rounded-full bg-bg-elevated border border-border flex items-center justify-center text-sm shrink-0">
-                      <span>{getMemberEmoji(m.name)}</span>
+                      <span>{getMemberEmoji()}</span>
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-text-primary truncate">
