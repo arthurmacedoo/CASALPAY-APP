@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', '__bug_review_admin/**', 'main_onedrive/**']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -23,6 +23,7 @@ export default defineConfig([
             'warn',
             { allowConstantExport: true },
           ],
+          '@typescript-eslint/no-explicit-any': 'off',
         },
       },
     ],

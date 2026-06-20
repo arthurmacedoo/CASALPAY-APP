@@ -31,7 +31,7 @@ function getMonthKey(date: string): string {
  */
 function sanitizeEventId(raw: string): string {
   return raw
-    .replace(/[\/\\.\s#$\[\]]/g, "_")
+    .replace(/[/\\.\s#$[\]]/g, "_")
     .slice(0, 128);
 }
 

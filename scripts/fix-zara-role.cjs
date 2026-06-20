@@ -20,7 +20,7 @@ async function fixZaraRole() {
   for (const doc of snap.docs) {
     const data = doc.data();
     if (data.name && data.name.toLowerCase().includes('zara')) {
-      console.log(Fixing role for Zara ( + doc.id + ) from  + data.role +  to member...);
+      console.log('Fixing role for Zara (' + doc.id + ') from ' + data.role + ' to member...');
       await db.collection('groups').doc(GROUP_ID).collection('members').doc(doc.id).update({
         role: 'member'
       });
