@@ -51,15 +51,16 @@ export function resolveSplitUids(
   memberUid: string | null,
   allMemberUids: string[]
 ): string[] {
-  // Novo modelo
-  if (t.splitBetweenUserIds && t.splitBetweenUserIds.length > 0) {
-    return t.splitBetweenUserIds;
-  }
-
+  // Se for "Só de um", força a resolução para a pessoa dona do gasto (ignora lixo no array)
   if (t.splitMode === "personal") {
     if (t.personalOwnerUserId) return [t.personalOwnerUserId];
     const payerUid = resolvePaidByUid(t, adminUid, memberUid);
     return payerUid ? [payerUid] : [];
+  }
+
+  // Novo modelo de Rateio
+  if (t.splitBetweenUserIds && t.splitBetweenUserIds.length > 0) {
+    return t.splitBetweenUserIds;
   }
 
   // Legado: mapeamento via splitType
