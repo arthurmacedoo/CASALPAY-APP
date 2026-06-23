@@ -2,6 +2,7 @@ import React, { createContext, useContext } from "react";
 import type { ReactNode } from "react";
 import { usePushNotifications, type PushStatus } from "../hooks/usePushNotifications";
 import { useAuthContext } from "./AuthContext";
+import { useGroupContext } from "./GroupContext";
 
 interface NotificationContextType {
   permission: NotificationPermission;
@@ -14,7 +15,10 @@ const NotificationContext = createContext<NotificationContextType | null>(null);
 
 export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { user } = useAuthContext();
-  const pushState = usePushNotifications(user);
+  const { group } = useGroupContext();
+  const activeGroupId = group?.id || null;
+  const pushState = usePushNotifications(user, activeGroupId);
+
 
   return (
     <NotificationContext.Provider value={pushState}>

@@ -36,7 +36,8 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { group, currentMember, members } = useGroupContext();
+  const { group, currentMember } = useGroupContext();
+
 
   useEffect(() => {
     setLoading(true);
@@ -91,7 +92,8 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
     );
 
     return unsubscribe;
-  }, [monthKey, group, currentMember, members]);
+  }, [monthKey, group, currentMember]);
+
 
   const addTransaction = useCallback(
     async (data: TransactionFormData, amountCents: number) => {

@@ -1,22 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getApps, initializeApp, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { processApplePayEvent } from "./webhook-apple-pay.js";
+import { initFirebaseAdmin } from "./_firebase-admin.js";
 
-// ── Firebase Admin (singleton) ────────────────────────────────────────────────
-if (!getApps().length) {
-  const privateKey = (process.env.FIREBASE_PRIVATE_KEY ?? "").replace(/\\n/g, "\n");
-
-  if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && privateKey) {
-    initializeApp({
-      credential: cert({
-        projectId:   process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey,
-      }),
-    });
-  }
-}
+// Inicializa Firebase Admin SDK
+initFirebaseAdmin();
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -80,10 +68,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  if (!getApps().length) {
-    return res.status(500).json({ error: "Firebase Admin não inicializado" });
-  }
-
   // ── Validação do body ─────────────────────────────────────────────────────
   const body = (req.body ?? {}) as Record<string, unknown>;
   const events = Array.isArray(body.events) ? (body.events as IncomingEvent[]) : null;
@@ -98,8 +82,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: "Máximo de 100 eventos por lote." });
   }
 
-  const COUPLE_ID = process.env.VITE_COUPLE_ID ?? "arthur-namorada-2026";
-  const db        = getFirestore();
+  // Permite ler o groupId dinamicamente, caindo no default antigo se ausente
+  const groupId = (req.query.groupId as string) || (body.groupId as string) || process.env.VITE_COUPLE_ID || "arthur-namorada-2026";
+  const db      = getFirestore();
 
   // ── Processamento em lote ─────────────────────────────────────────────────
   let created    = 0;
@@ -107,7 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let failed     = 0;
   const results: EventSummary[] = [];
 
-  console.log(`[sync] Iniciando lote com ${events.length} evento(s).`);
+  console.log(`[sync] Iniciando lote com ${events.length} evento(s) no grupo ${groupId}.`);
 
   for (const event of events) {
     const eventId = typeof event.clientEventId === "string"
@@ -117,9 +102,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const result = await processApplePayEvent(
         db,
-        COUPLE_ID,
+        groupId,
         event as Record<string, unknown>
       );
+
 
       if (result.duplicate) {
         duplicates++;

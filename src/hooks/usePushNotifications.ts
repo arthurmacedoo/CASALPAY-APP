@@ -17,7 +17,7 @@ export type PushStatus =
   | "registered"
   | "error";
 
-export function usePushNotifications(user: User | null) {
+export function usePushNotifications(user: User | null, activeGroupId: string | null) {
   const [permission, setPermission] = useState<NotificationPermission>(
     "Notification" in window ? Notification.permission : "denied"
   );
@@ -25,7 +25,7 @@ export function usePushNotifications(user: User | null) {
   const [pushError, setPushError] = useState<string | null>(null);
 
   const setupPush = useCallback(async () => {
-    if (!user) return;
+    if (!user || !activeGroupId) return;
 
     // ── Diagnóstico de pré-condições ──────────────────────────────────────────
     if (!("Notification" in window)) {
@@ -93,16 +93,22 @@ export function usePushNotifications(user: User | null) {
       const userName = isOwner ? OWNER_NAME : PARTNER_NAME;
       const platform = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? "mobile" : "desktop";
 
-      console.log(`[FCM] Registrando dispositivo para ${userName} (${platform})...`);
+      console.log(`[FCM] Registrando dispositivo para ${userName} (${platform}) no grupo ${activeGroupId}...`);
+
+      const idToken = await user.getIdToken();
 
       const response = await fetch("/api/register-device", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${idToken}`
+        },
         body: JSON.stringify({
           token,
           user:      userName,
           platform,
           userAgent: navigator.userAgent,
+          groupId:   activeGroupId,
         }),
       });
 
@@ -140,7 +146,8 @@ export function usePushNotifications(user: User | null) {
       setPushStatus("error");
       setPushError(errMsg);
     }
-  }, [user]);
+  }, [user, activeGroupId]);
+
 
   const requestPermission = async () => {
     if (!("Notification" in window)) return;

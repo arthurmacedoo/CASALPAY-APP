@@ -98,9 +98,13 @@ export const MessagesPage: React.FC = () => {
     setError(null);
 
     try {
+      const idToken = user ? await user.getIdToken() : "";
       const response = await fetch("/api/send-notification", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${idToken}`
+        },
         body: JSON.stringify({
           target:  targetName,
           title:   `${senderName}:`,
@@ -108,6 +112,7 @@ export const MessagesPage: React.FC = () => {
           groupId: group?.id,
         }),
       });
+
 
       const data = await response.json().catch(() => ({}));
 

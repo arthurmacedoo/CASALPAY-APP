@@ -1,24 +1,14 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getApps, initializeApp, cert } from "firebase-admin/app";
+import { getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
+import { initFirebaseAdmin } from "./_firebase-admin.js";
 
-// ── Firebase Admin (singleton) ────────────────────────────────────────────────
-if (!getApps().length) {
-  const privateKey = (process.env.FIREBASE_PRIVATE_KEY ?? "").replace(/\\n/g, "\n");
-
-  if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && privateKey) {
-    initializeApp({
-      credential: cert({
-        projectId:   process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey,
-      }),
-    });
-  }
-}
+// Inicializa Firebase Admin SDK
+initFirebaseAdmin();
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+
 
 /** Extrai "YYYY-MM" a partir de "YYYY-MM-DD". */
 function getMonthKey(date: string): string {

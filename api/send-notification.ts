@@ -1,39 +1,36 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getApps, initializeApp, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
+import { initFirebaseAdmin, verifyUserToken } from "./_firebase-admin.js";
 
-// ── Inicializa Firebase Admin SDK (singleton) ────────────────────────────────
-if (!getApps().length) {
-  const privateKey = (process.env.FIREBASE_PRIVATE_KEY ?? "")
-    .replace(/\\n/g, "\n");
-
-  if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !privateKey) {
-    console.error("[FCM] Variáveis de ambiente do Firebase Admin SDK não configuradas.");
-  } else {
-    initializeApp({
-      credential: cert({
-        projectId:   process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey,
-      }),
-    });
-  }
-}
+// Inicializa Firebase Admin SDK
+initFirebaseAdmin();
 
 // ── Handler principal ────────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  const origin = req.headers.origin;
+  const allowedOrigins = ["https://casalpay.vercel.app"];
+  
+  if (origin && (allowedOrigins.includes(origin) || origin.startsWith("http://localhost:"))) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  } else {
+    res.setHeader("Access-Control-Allow-Origin", "https://casalpay.vercel.app");
+  }
+
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Método não permitido" });
   }
 
-  if (!getApps().length) {
-    return res.status(500).json({ error: "Configuração do servidor incompleta." });
+  // ── Autenticação ──────────────────────────────────────────────────────────
+  try {
+    await verifyUserToken(req.headers.authorization);
+  } catch (err: any) {
+    console.warn("[FCM Send] Falha de autenticação:", err.message);
+    return res.status(401).json({ error: "Unauthorized", detail: err.message });
   }
 
   const { target, title, message, groupId } = req.body ?? {};
@@ -45,6 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!groupId) {
     return res.status(400).json({ error: "groupId é obrigatório no SaaS." });
   }
+
 
   try {
     const db = getFirestore();
