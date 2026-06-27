@@ -121,19 +121,44 @@ function pairKey(debtorId: string, creditorId: string): string {
 }
 
 /**
- * Converte o mapa de dívidas brutas por par em array tipado de DirectDebt.
- * Filtra pares com valor zero ou negativo (arredondamentos).
+ * Converte o mapa de dívidas brutas por par em array tipado de DirectDebt,
+ * fazendo NETTING entre pares opostos antes de retornar.
+ *
+ * Exemplo: se A→B = 4,37 e B→A = 25,00 → resultado: { B→A, 20,63 }
+ * Isso evita exibir "Você deve a X" e "X te deve" simultaneamente.
  */
 function buildDirectDebts(
   pairDebts: Record<string, number>
 ): DirectDebt[] {
-  return Object.entries(pairDebts)
-    .filter(([, amount]) => amount > 0)
-    .map(([key, amount]) => {
-      const [debtorId, creditorId] = key.split("::");
-      return { debtorId, creditorId, amount };
-    });
+  const result: DirectDebt[] = [];
+  const processed = new Set<string>();
+
+  for (const [key, rawAmount] of Object.entries(pairDebts)) {
+    if (processed.has(key)) continue;
+
+    const [debtorId, creditorId] = key.split("::");
+    const reverseKey    = pairKey(creditorId, debtorId);
+    const reverseAmount = pairDebts[reverseKey] ?? 0;
+
+    // Marca ambas as direções como processadas
+    processed.add(key);
+    processed.add(reverseKey);
+
+    const net = rawAmount - reverseAmount;
+
+    if (net > 0) {
+      // Direção original prevalece (debtorId → creditorId)
+      result.push({ debtorId, creditorId, amount: net });
+    } else if (net < 0) {
+      // Direção inversa prevalece (creditorId → debtorId)
+      result.push({ debtorId: creditorId, creditorId: debtorId, amount: -net });
+    }
+    // net === 0 → par está zerado, nada a exibir
+  }
+
+  return result;
 }
+
 
 // ─── Motor principal e Algoritmo de Dívidas ───────────────────────────────────
 
