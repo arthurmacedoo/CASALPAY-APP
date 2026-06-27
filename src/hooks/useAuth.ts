@@ -23,6 +23,26 @@ interface UseAuthReturn {
   register: (name: string, email: string, pass: string, remember?: boolean) => Promise<void>;
   updateUserName: (newName: string) => Promise<void>;
   logout: () => Promise<void>;
+  clearError: () => void;
+}
+
+// ── Tradução de erros do Firebase para Português ──────────────────────────────────
+function firebaseErrorPT(code: string): string {
+  const map: Record<string, string> = {
+    "auth/invalid-credential":    "E-mail ou senha incorretos. Verifique e tente novamente.",
+    "auth/wrong-password":        "Senha incorreta. Tente novamente.",
+    "auth/user-not-found":        "Nenhuma conta encontrada com este e-mail.",
+    "auth/invalid-email":         "E-mail inválido. Verifique o formato.",
+    "auth/too-many-requests":     "Muitas tentativas. Aguarde alguns minutos e tente novamente.",
+    "auth/user-disabled":         "Esta conta foi desativada. Entre em contato com o suporte.",
+    "auth/network-request-failed":"Sem conexão com a internet. Verifique sua rede.",
+    "auth/email-already-in-use":  "Este e-mail já está cadastrado. Tente fazer login.",
+    "auth/weak-password":         "A senha deve ter pelo menos 6 caracteres.",
+    "auth/operation-not-allowed": "Operação não permitida. Contate o suporte.",
+    "auth/requires-recent-login": "Sessão expirada. Faça login novamente.",
+    "auth/popup-closed-by-user":  "Login cancelado. Tente novamente.",
+  };
+  return map[code] ?? "Erro inesperado. Tente novamente.";
 }
 
 export function useAuth(): UseAuthReturn {
@@ -38,17 +58,13 @@ export function useAuth(): UseAuthReturn {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!mounted) return;
 
-      console.log("Auth state changed:", {
-        uid: currentUser?.uid ?? null,
-        email: currentUser?.email ?? null,
-      });
-
       setUser(currentUser);
       setUnauthorizedReason(null);
-      setError(null);
+      // Não limpa o error aqui para preservar mensagem de credenciais inválidas
 
       if (currentUser) {
         setIsAuthorized(true);
+        setError(null); // Limpa erro apenas quando login bem-sucedido
       } else {
         setIsAuthorized(false);
       }
@@ -62,6 +78,8 @@ export function useAuth(): UseAuthReturn {
     };
   }, []);
 
+  const clearError = () => setError(null);
+
   const login = async (email: string, pass: string, remember: boolean = true) => {
     setError(null);
     setUnauthorizedReason(null);
@@ -69,9 +87,10 @@ export function useAuth(): UseAuthReturn {
     try {
       await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
       await signInWithEmailAndPassword(auth, email, pass);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code ?? "";
       console.error("[useAuth] Erro no login:", err);
-      setError(err.message || 'Erro ao fazer login. Verifique as credenciais.');
+      setError(firebaseErrorPT(code));
     } finally {
       setLoading(false);
     }
@@ -84,11 +103,7 @@ export function useAuth(): UseAuthReturn {
     try {
       await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
       const userCred = await createUserWithEmailAndPassword(auth, email, pass);
-      
-      // Atualiza o displayName no Auth
       await updateProfile(userCred.user, { displayName: name.trim() });
-      
-      // Cria o perfil inicial zerado no Firestore (activeGroupId null até ele criar/entrar em um)
       await setDoc(doc(db, 'users', userCred.user.uid), {
         userId: userCred.user.uid,
         name: name.trim(),
@@ -97,10 +112,10 @@ export function useAuth(): UseAuthReturn {
         defaultGroupId: null,
         updatedAt: serverTimestamp()
       });
-      
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code ?? "";
       console.error("[useAuth] Erro no cadastro:", err);
-      setError(err.message || 'Erro ao criar conta.');
+      setError(firebaseErrorPT(code));
       await signOut(auth);
     } finally {
       setLoading(false);
@@ -147,5 +162,5 @@ export function useAuth(): UseAuthReturn {
     setUnauthorizedReason(null);
   };
 
-  return { user, loading, error, isAuthorized, unauthorizedReason, login, register, updateUserName, logout };
+  return { user, loading, error, isAuthorized, unauthorizedReason, login, register, updateUserName, logout, clearError };
 }

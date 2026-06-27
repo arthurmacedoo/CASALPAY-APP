@@ -13,6 +13,7 @@ interface UseAuthReturn {
   register: (name: string, email: string, pass: string, remember?: boolean) => Promise<void>;
   updateUserName: (newName: string) => Promise<void>;
   logout: () => Promise<void>;
+  clearError: () => void;
 }
 
 const AuthContext = createContext<UseAuthReturn | undefined>(undefined);

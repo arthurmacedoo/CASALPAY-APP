@@ -201,13 +201,53 @@ export interface SettlementObligation {
 }
 
 /**
+ * Despesa individual que compõe uma dívida direta.
+ * Todos os valores monetários em centavos (inteiros).
+ */
+export interface DebtSource {
+  /** ID do documento da despesa no Firestore */
+  expenseId:   string;
+  /** Descrição da despesa (ex: "Mercado", "Uber") */
+  description: string;
+  /** Data no formato "YYYY-MM-DD" */
+  date:        string;
+  /** Valor total da despesa em centavos */
+  totalAmount: number;
+  /** Cota do devedor nesta despesa em centavos */
+  yourShare:   number;
+  /** Nome de quem pagou (resolvido via Map O(1) em calculateBalance) */
+  paidByName:  string;
+  /** Quantas pessoas dividiram */
+  splitCount:  number;
+}
+
+/**
+ * Acerto (Pix) que já abateu parte de uma dívida direta.
+ * Valor em centavos.
+ */
+export interface DebtSettlement {
+  settlementId: string;
+  /** Valor do acerto em centavos */
+  amount:       number;
+  /** Data no formato "YYYY-MM-DD" */
+  date:         string;
+}
+
+/**
  * Dívida direta entre um par (devedor → credor), SEM otimização de rotas.
- * Preserva a relação original "X deve para Gabi" e "X deve para Miguel" separadamente.
+ * Carrega rastreabilidade completa para o DebtDetailSheet.
  */
 export interface DirectDebt {
-  debtorId: string;
-  creditorId: string;
-  amount: number;
+  debtorId:    string;
+  creditorId:  string;
+  /** Valor líquido após netting e acertos (centavos) */
+  amount:      number;
+  /** Valor bruto das despesas antes de acertos (centavos) */
+  rawAmount:   number;
+  /** Despesas que geraram esta dívida */
+  sources:     DebtSource[];
+  /** Acertos que já abateram esta dívida */
+  settlements: DebtSettlement[];
 }
 
 export interface BalanceSummary {

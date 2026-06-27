@@ -4,6 +4,8 @@ import type {
   BalanceSummary,
   SettlementObligation,
   DirectDebt,
+  DebtSource,
+  DebtSettlement,
   ExpenseTransaction,
   SettlementTransaction,
 } from "../types";
@@ -120,40 +122,70 @@ function pairKey(debtorId: string, creditorId: string): string {
   return `${debtorId}::${creditorId}`;
 }
 
+// ─── Estrutura interna de rastreamento por par ─────────────────────────────────
+
+interface PairDebtEntry {
+  grossTotal:  number;           // soma bruta das despesas (NUNCA reduzida por acertos)
+  total:       number;           // total líquido após acertos (decrementado nos settlements)
+  sources:     DebtSource[];     // despesas que geraram esta dívida
+  settlements: DebtSettlement[]; // acertos que abateram esta dívida (APENAS desta direção)
+}
+
 /**
  * Converte o mapa de dívidas brutas por par em array tipado de DirectDebt,
- * fazendo NETTING entre pares opostos antes de retornar.
+ * fazendo NETTING entre pares opostos e carregando sources + settlements.
  *
- * Exemplo: se A→B = 4,37 e B→A = 25,00 → resultado: { B→A, 20,63 }
- * Isso evita exibir "Você deve a X" e "X te deve" simultaneamente.
+ * Exemplo: se A→B = 437 e B→A = 2500 → resultado: { B→A, net=2063, sources de B→A }
  */
 function buildDirectDebts(
-  pairDebts: Record<string, number>
+  pairDebts: Record<string, PairDebtEntry>
 ): DirectDebt[] {
-  const result: DirectDebt[] = [];
+  const result: DirectDebt[]    = [];
   const processed = new Set<string>();
 
-  for (const [key, rawAmount] of Object.entries(pairDebts)) {
+  for (const [key, entry] of Object.entries(pairDebts)) {
     if (processed.has(key)) continue;
 
     const [debtorId, creditorId] = key.split("::");
-    const reverseKey    = pairKey(creditorId, debtorId);
-    const reverseAmount = pairDebts[reverseKey] ?? 0;
+    const reverseKey   = pairKey(creditorId, debtorId);
+    const reverseEntry = pairDebts[reverseKey];
 
-    // Marca ambas as direções como processadas
     processed.add(key);
     processed.add(reverseKey);
 
-    const net = rawAmount - reverseAmount;
+    const forwardGross = entry.grossTotal;
+    const reverseGross = reverseEntry?.grossTotal ?? 0;
+    const forwardNet   = entry.total;
+    const reverseNet   = reverseEntry?.total ?? 0;
+    const net          = forwardNet - reverseNet;
+
+    // Settlements de cada direção ficam apenas na sua entrada —
+    // juntá-los aqui exibe todos os acertos relevantes sem duplicar.
+    const allSettlements: DebtSettlement[] = [
+      ...entry.settlements,
+      ...(reverseEntry?.settlements ?? []),
+    ];
 
     if (net > 0) {
-      // Direção original prevalece (debtorId → creditorId)
-      result.push({ debtorId, creditorId, amount: net });
+      result.push({
+        debtorId,
+        creditorId,
+        amount:      net,
+        rawAmount:   forwardGross,   // bruto REAL das despesas (sem abatimento)
+        sources:     entry.sources,
+        settlements: allSettlements,
+      });
     } else if (net < 0) {
-      // Direção inversa prevalece (creditorId → debtorId)
-      result.push({ debtorId: creditorId, creditorId: debtorId, amount: -net });
+      result.push({
+        debtorId:    creditorId,
+        creditorId:  debtorId,
+        amount:      -net,
+        rawAmount:   reverseGross,   // bruto REAL da direção inversa
+        sources:     reverseEntry?.sources ?? [],
+        settlements: allSettlements,
+      });
     }
-    // net === 0 → par está zerado, nada a exibir
+    // net === 0 → par zerado, nada a exibir
   }
 
   return result;
@@ -219,16 +251,23 @@ export function calculateBalance(
   transactions: Transaction[],
   members: GroupMember[]
 ): BalanceSummary {
-  const adminUid  = resolveAdminUid(members);
-  const memberUid = resolveMemberUid(members);
+  const adminUid      = resolveAdminUid(members);
+  const memberUid     = resolveMemberUid(members);
   const allMemberUids = members.map((m) => m.userId);
+
+  // ── Lookup O(1): userId → firstName ──────────────────────────────────────────
+  // Evita O(n) de Array.find() dentro dos loops de despesa.
+  const nameMap = new Map<string, string>(
+    members.map((m) => [m.userId, m.name.split(" ")[0]])
+  );
+  const resolveName = (uid: string): string => nameMap.get(uid) ?? "Membro";
 
   const memberExpenses:    Record<string, number> = {};
   const memberSettlements: Record<string, number> = {};
   const memberBalances:    Record<string, number> = {};
-  // Rastreia dívidas brutas: chave = "debtorId::creditorId", valor em centavos.
-  // Não faz otimização de rotas — preserva "X deve para Gabi" E "X deve para Miguel".
-  const pairDebts:         Record<string, number> = {};
+
+  // Rastreia dívidas brutas por par com rastreabilidade completa
+  const pairDebts: Record<string, PairDebtEntry> = {};
 
   let totalExpenses  = 0;
   let expenseCount   = 0;
@@ -259,6 +298,7 @@ export function calculateBalance(
 
     const sharePerMember = Math.floor(t.amount / splitUids.length);
     const remainder      = t.amount % splitUids.length;
+    const paidByName     = resolveName(paidBy);
 
     splitUids.forEach((uid, index) => {
       const share = index === 0 ? sharePerMember + remainder : sharePerMember;
@@ -266,7 +306,21 @@ export function calculateBalance(
 
       // Dívida direta: uid deve "share" para paidBy
       if (uid !== paidBy) {
-        addToMap(pairDebts, pairKey(uid, paidBy), share);
+        const key = pairKey(uid, paidBy);
+        if (!pairDebts[key]) {
+          pairDebts[key] = { grossTotal: 0, total: 0, sources: [], settlements: [] };
+        }
+        pairDebts[key].grossTotal += share;
+        pairDebts[key].total      += share;
+        pairDebts[key].sources.push({
+          expenseId:   t.id,
+          description: t.description,
+          date:        t.date,
+          totalAmount: t.amount,
+          yourShare:   share,
+          paidByName,
+          splitCount:  splitUids.length,
+        });
       }
     });
   }
@@ -289,9 +343,20 @@ export function calculateBalance(
     addToMap(memberBalances, fromUid,  t.amount);  // débito reduzido
     addToMap(memberBalances, toUid,   -t.amount);  // crédito reduzido
 
-    // Abate a dívida direta — usa ?? 0 para tolerar acertos sem despesa correspondente
+    // Abate o total líquido e registra o settlement APENAS nesta direção.
+    // Não empurramos para reverseKey pois buildDirectDebts já mescla os dois lados,
+    // evitando a duplicação de acertos na exibição.
     const key = pairKey(fromUid, toUid);
-    pairDebts[key] = Math.max(0, (pairDebts[key] ?? 0) - t.amount);
+    if (!pairDebts[key]) {
+      pairDebts[key] = { grossTotal: 0, total: 0, sources: [], settlements: [] };
+    }
+    const settlementEntry: DebtSettlement = {
+      settlementId: t.id,
+      amount:       t.amount,
+      date:         t.date,
+    };
+    pairDebts[key].total = Math.max(0, pairDebts[key].total - t.amount);
+    pairDebts[key].settlements.push(settlementEntry);
   }
 
   // ── netBalance simplificado para grupos de 2 (mantém UX do BalanceCard) ──

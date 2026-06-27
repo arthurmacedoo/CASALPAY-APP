@@ -26,22 +26,6 @@ const LoadingScreen: React.FC = () => (
   </div>
 );
 
-const ErrorScreen: React.FC<{ message: string }> = ({ message }) => (
-  <div className="flex flex-col items-center justify-center min-h-screen gap-4 px-8">
-    <span className="text-4xl">😕</span>
-    <p className="text-text-primary font-semibold text-center">
-      Não foi possível conectar
-    </p>
-    <p className="text-text-muted text-sm text-center">{message}</p>
-    <button
-      onClick={() => window.location.reload()}
-      className="text-accent-pink font-medium text-sm mt-2"
-    >
-      Tentar novamente
-    </button>
-  </div>
-);
-
 // Componente interno de Blindagem de Grupo
 const ProtectedGroupRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading: authLoading } = useAuthContext();
@@ -103,10 +87,12 @@ const AuthenticatedApp: React.FC = () => {
 };
 
 const MainApp: React.FC = () => {
-  const { user, loading, error, isAuthorized } = useAuthContext();
+  const { user, loading, isAuthorized } = useAuthContext();
 
+  // Aguarda Firebase verificar sessão salva (apenas na primeira carga)
   if (loading) return <LoadingScreen />;
-  if (error) return <ErrorScreen message={error} />;
+
+  // Erros de login ficam inline no formulário — não redirecionam para ErrorScreen
   if (!user || !isAuthorized) return <LoginPage />;
 
   return <AuthenticatedApp />;

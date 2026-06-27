@@ -43,6 +43,15 @@ export default {
         glow: "0 0 20px rgba(232, 121, 160, 0.15)",
         "glow-blue": "0 0 20px rgba(123, 143, 255, 0.15)",
       },
+      keyframes: {
+        "slide-up": {
+          "0%":   { transform: "translateY(100%)" },
+          "100%": { transform: "translateY(0)" },
+        },
+      },
+      animation: {
+        "slide-up": "slide-up 0.28s cubic-bezier(0.32, 0.72, 0, 1) both",
+      },
     },
   },
   plugins: [],

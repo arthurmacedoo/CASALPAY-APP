@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useAuthContext } from "../contexts/AuthContext";
 
 export const LoginPage: React.FC = () => {
-  const { login, register, error, loading } = useAuthContext();
+  const { login, register, error, loading, clearError } = useAuthContext();
   const [isRegister, setIsRegister] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -44,14 +44,14 @@ export const LoginPage: React.FC = () => {
           />
           <button 
             type="button"
-            onClick={() => { setIsRegister(false); /*setError(null);*/ }}
+            onClick={() => { setIsRegister(false); clearError(); }}
             className={`relative z-10 flex-1 py-2 text-sm font-semibold rounded-lg transition-colors duration-300 ${!isRegister ? 'text-accent-blue' : 'text-text-muted hover:text-text-secondary'}`}
           >
             Entrar
           </button>
           <button 
             type="button"
-            onClick={() => { setIsRegister(true); /*setError(null);*/ }}
+            onClick={() => { setIsRegister(true); clearError(); }}
             className={`relative z-10 flex-1 py-2 text-sm font-semibold rounded-lg transition-colors duration-300 ${isRegister ? 'text-accent-purple' : 'text-text-muted hover:text-text-secondary'}`}
           >
             Criar Conta
