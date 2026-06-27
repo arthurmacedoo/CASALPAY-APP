@@ -200,6 +200,16 @@ export interface SettlementObligation {
   amount: number;
 }
 
+/**
+ * Dívida direta entre um par (devedor → credor), SEM otimização de rotas.
+ * Preserva a relação original "X deve para Gabi" e "X deve para Miguel" separadamente.
+ */
+export interface DirectDebt {
+  debtorId: string;
+  creditorId: string;
+  amount: number;
+}
+
 export interface BalanceSummary {
   /** Total de despesas pagas por cada membro. Chave = userId */
   memberExpenses: Record<string, number>;
@@ -221,6 +231,12 @@ export interface BalanceSummary {
   netBalance: number;
   /** UID do admin do grupo (âncora do sinal do netBalance) */
   adminUid: string | null;
-  /** Lista de transferências necessárias para zerar as dívidas do grupo */
+  /** Lista de transferências otimizadas para zerar as dívidas do grupo (mínimo de Pix) */
   obligations: SettlementObligation[];
+  /**
+   * Dívidas brutas por par (devedor → credor), sem otimização de rotas.
+   * Usadas para exibição direta no BalanceCard: garante que "X deve para Gabi"
+   * e "X deve para Miguel" apareçam como linhas separadas.
+   */
+  directDebts: DirectDebt[];
 }
