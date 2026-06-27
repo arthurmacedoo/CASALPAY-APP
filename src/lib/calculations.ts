@@ -214,59 +214,59 @@ export function calculateBalance(
     memberBalances[uid] = 0;
   }
 
+  // ── PASSO 1: todas as DESPESAS → popula pairDebts e memberBalances ───────────
+  // Executado antes dos acertos para garantir que pairDebts está 100% construído
+  // antes de qualquer subtração, independente da ordem date DESC das transações.
   for (const t of transactions) {
-    // Exclui acertos de fatura pessoal do cálculo compartilhado
-    if (t.type === "settlement" && t.pixDestination === "zara_card") continue;
     if (t.visibility === "personal") continue;
+    if (t.type !== "expense") continue;
 
-    if (t.type === "expense") {
-      expenseCount++;
-      totalExpenses += t.amount;
+    expenseCount++;
+    totalExpenses += t.amount;
 
-      const paidBy   = resolvePaidByUid(t, adminUid, memberUid);
-      const splitUids = resolveSplitUids(t, adminUid, memberUid, allMemberUids);
+    const paidBy    = resolvePaidByUid(t, adminUid, memberUid);
+    const splitUids = resolveSplitUids(t, adminUid, memberUid, allMemberUids);
 
-      if (!paidBy || splitUids.length === 0) continue;
+    if (!paidBy || splitUids.length === 0) continue;
 
-      // Quem pagou recebe crédito integral
-      addToMap(memberExpenses, paidBy, t.amount);
-      addToMap(memberBalances, paidBy, t.amount);
+    addToMap(memberExpenses, paidBy, t.amount);
+    addToMap(memberBalances, paidBy, t.amount);
 
-      // Cada membro que divide arca com sua cota
-      const sharePerMember = Math.floor(t.amount / splitUids.length);
-      const remainder = t.amount % splitUids.length;
+    const sharePerMember = Math.floor(t.amount / splitUids.length);
+    const remainder      = t.amount % splitUids.length;
 
-      splitUids.forEach((uid, index) => {
-        // O primeiro da lista absorve o centavo de arredondamento
-        const share = index === 0 ? sharePerMember + remainder : sharePerMember;
-        addToMap(memberBalances, uid, -share);
+    splitUids.forEach((uid, index) => {
+      const share = index === 0 ? sharePerMember + remainder : sharePerMember;
+      addToMap(memberBalances, uid, -share);
 
-        // Rastreia a dívida direta: uid deve "share" para paidBy
-        // (ignora quando o pagador divide consigo mesmo)
-        if (uid !== paidBy) {
-          addToMap(pairDebts, pairKey(uid, paidBy), share);
-        }
-      });
-    }
-
-    if (t.type === "settlement") {
-      settlementCount++;
-
-      const { fromUid, toUid } = resolveSettlementUids(t, adminUid, memberUid);
-      if (!fromUid || !toUid) continue;
-
-      addToMap(memberSettlements, fromUid, t.amount);
-      // Quem pagou tem seu débito reduzido
-      addToMap(memberBalances, fromUid, t.amount);
-      // Quem recebeu tem seu crédito reduzido
-      addToMap(memberBalances, toUid, -t.amount);
-
-      // Reduz a dívida direta correspondente (fromUid pagou toUid)
-      const key = pairKey(fromUid, toUid);
-      if (pairDebts[key] !== undefined) {
-        pairDebts[key] = Math.max(0, pairDebts[key] - t.amount);
+      // Dívida direta: uid deve "share" para paidBy
+      if (uid !== paidBy) {
+        addToMap(pairDebts, pairKey(uid, paidBy), share);
       }
-    }
+    });
+  }
+
+  // ── PASSO 2: todos os ACERTOS → abate pairDebts e ajusta memberBalances ──────
+  // Com pairDebts já totalmente populado, a subtração é sempre correta,
+  // resolvendo o bug onde acertos mais recentes (date DESC) eram processados
+  // antes das despesas e não encontravam a chave no mapa.
+  for (const t of transactions) {
+    if (t.visibility === "personal") continue;
+    if (t.type !== "settlement") continue;
+    if (t.pixDestination === "zara_card") continue;
+
+    settlementCount++;
+
+    const { fromUid, toUid } = resolveSettlementUids(t, adminUid, memberUid);
+    if (!fromUid || !toUid) continue;
+
+    addToMap(memberSettlements, fromUid, t.amount);
+    addToMap(memberBalances, fromUid,  t.amount);  // débito reduzido
+    addToMap(memberBalances, toUid,   -t.amount);  // crédito reduzido
+
+    // Abate a dívida direta — usa ?? 0 para tolerar acertos sem despesa correspondente
+    const key = pairKey(fromUid, toUid);
+    pairDebts[key] = Math.max(0, (pairDebts[key] ?? 0) - t.amount);
   }
 
   // ── netBalance simplificado para grupos de 2 (mantém UX do BalanceCard) ──
