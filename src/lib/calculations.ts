@@ -3,6 +3,7 @@ import type {
   GroupMember,
   BalanceSummary,
   SettlementObligation,
+  DirectDebt,
   ExpenseTransaction,
   SettlementTransaction,
 } from "../types";
@@ -113,6 +114,27 @@ function addToMap(map: Record<string, number>, uid: string, value: number): void
   map[uid] = (map[uid] ?? 0) + value;
 }
 
+// ─── Chave composta devedor/credor ────────────────────────────────────────────
+
+function pairKey(debtorId: string, creditorId: string): string {
+  return `${debtorId}::${creditorId}`;
+}
+
+/**
+ * Converte o mapa de dívidas brutas por par em array tipado de DirectDebt.
+ * Filtra pares com valor zero ou negativo (arredondamentos).
+ */
+function buildDirectDebts(
+  pairDebts: Record<string, number>
+): DirectDebt[] {
+  return Object.entries(pairDebts)
+    .filter(([, amount]) => amount > 0)
+    .map(([key, amount]) => {
+      const [debtorId, creditorId] = key.split("::");
+      return { debtorId, creditorId, amount };
+    });
+}
+
 // ─── Motor principal e Algoritmo de Dívidas ───────────────────────────────────
 
 function computeOptimalSettlements(balances: Record<string, number>): SettlementObligation[] {
@@ -179,6 +201,9 @@ export function calculateBalance(
   const memberExpenses:    Record<string, number> = {};
   const memberSettlements: Record<string, number> = {};
   const memberBalances:    Record<string, number> = {};
+  // Rastreia dívidas brutas: chave = "debtorId::creditorId", valor em centavos.
+  // Não faz otimização de rotas — preserva "X deve para Gabi" E "X deve para Miguel".
+  const pairDebts:         Record<string, number> = {};
 
   let totalExpenses  = 0;
   let expenseCount   = 0;
@@ -215,6 +240,12 @@ export function calculateBalance(
         // O primeiro da lista absorve o centavo de arredondamento
         const share = index === 0 ? sharePerMember + remainder : sharePerMember;
         addToMap(memberBalances, uid, -share);
+
+        // Rastreia a dívida direta: uid deve "share" para paidBy
+        // (ignora quando o pagador divide consigo mesmo)
+        if (uid !== paidBy) {
+          addToMap(pairDebts, pairKey(uid, paidBy), share);
+        }
       });
     }
 
@@ -229,6 +260,12 @@ export function calculateBalance(
       addToMap(memberBalances, fromUid, t.amount);
       // Quem recebeu tem seu crédito reduzido
       addToMap(memberBalances, toUid, -t.amount);
+
+      // Reduz a dívida direta correspondente (fromUid pagou toUid)
+      const key = pairKey(fromUid, toUid);
+      if (pairDebts[key] !== undefined) {
+        pairDebts[key] = Math.max(0, pairDebts[key] - t.amount);
+      }
     }
   }
 
@@ -236,7 +273,8 @@ export function calculateBalance(
   // Positivo = admin deve receber; Negativo = admin deve pagar.
   const netBalance = adminUid ? (memberBalances[adminUid] ?? 0) : 0;
 
-  const obligations = computeOptimalSettlements(memberBalances);
+  const obligations  = computeOptimalSettlements(memberBalances);
+  const directDebts  = buildDirectDebts(pairDebts);
 
   return {
     memberExpenses,
@@ -248,6 +286,7 @@ export function calculateBalance(
     netBalance,
     adminUid,
     obligations,
+    directDebts,
   };
 }
 
