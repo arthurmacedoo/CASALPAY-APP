@@ -218,6 +218,68 @@ async function sendCriticalAlert(
 }
 
 /**
+ * Envia uma notificação push padrão para todos os membros do grupo.
+ */
+async function sendGroupPush(
+  db: FirebaseFirestore.Firestore,
+  groupId: string,
+  title: string,
+  body: string
+): Promise<void> {
+  if (!getApps().length) return;
+
+  try {
+    const messaging = getMessaging();
+
+    const tokensSnap = await db
+      .collection("groups")
+      .doc(groupId)
+      .collection("fcm_tokens")
+      .get();
+
+    const tokens: string[] = [];
+    tokensSnap.forEach((doc) => {
+      const token = doc.data()?.token;
+      if (token && typeof token === "string" && !tokens.includes(token)) {
+        tokens.push(token);
+      }
+    });
+
+    if (tokens.length === 0) {
+      console.warn(`[webhook] Nenhum token FCM encontrado no grupo "${groupId}" para enviar push.`);
+      return;
+    }
+
+    const response = await messaging.sendEachForMulticast({
+      tokens,
+      notification: {
+        title,
+        body,
+      },
+      data: {
+        title,
+        body,
+        url: "/history",
+      },
+      webpush: {
+        notification: {
+          icon:  "/icon-192.png",
+          badge: "/icon-192.png",
+          tag:   "casalpay-pending-expense",
+        },
+        headers: { Urgency: "high", TTL: "86400" },
+      },
+    });
+
+    console.log(`[webhook] Push enviado para o grupo "${groupId}": ${response.successCount} ok, ${response.failureCount} falhas.`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[webhook] Falha ao enviar push para o grupo:", msg);
+  }
+}
+
+
+/**
  * Verifica idempotência via coleção apple_pay_events.
  * Retorna o ID da transação existente se for duplicata, ou null se for novo.
  *
@@ -447,6 +509,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         db,
         groupId,
         `Compra Apple Pay com valor irrecuperável. Motivo: "${result.reason}". Verifique a aba Pendentes.`
+      ).catch(console.error);
+    } else if (result.ok && !result.duplicate) {
+      // Dispara push de sucesso para despesa pendente
+      const amountStr = result.amountCents 
+        ? `R$ ${(result.amountCents / 100).toFixed(2).replace(".", ",")}`
+        : "com valor indefinido";
+      const desc = result.description || "Compra Apple Pay";
+      const userText = rawBody.deviceUser ? ` por ${rawBody.deviceUser}` : "";
+      
+      sendGroupPush(
+        db,
+        groupId,
+        "🛒 Novo gasto pendente",
+        `Gasto de ${amountStr} em "${desc}"${userText} registrado na aba Pendentes.`
       ).catch(console.error);
     }
 
