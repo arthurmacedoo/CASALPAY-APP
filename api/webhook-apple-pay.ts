@@ -475,6 +475,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ── Autenticação ──────────────────────────────────────────────────────────
   const authHeader     = req.headers.authorization ?? "";
+  const querySecret    = (req.query.secret as string) || (req.query.token as string) || "";
   const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 
   if (!WEBHOOK_SECRET) {
@@ -482,8 +483,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: "Server config error" });
   }
 
-  if (authHeader !== `Bearer ${WEBHOOK_SECRET}`) {
-    console.warn("[webhook] Token inválido:", authHeader.slice(0, 20));
+  const isAuthHeaderValid = authHeader === `Bearer ${WEBHOOK_SECRET}`;
+  const isQuerySecretValid = querySecret === WEBHOOK_SECRET;
+
+  if (!isAuthHeaderValid && !isQuerySecretValid) {
+    console.warn("[webhook] Token/Secret inválido");
     return res.status(401).json({ error: "Unauthorized" });
   }
 
@@ -494,10 +498,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const db        = getFirestore();
   const rawBody   = (req.body ?? {}) as Record<string, unknown>;
 
-  const groupId = (req.query.groupId as string) || (rawBody.groupId as string);
-  if (!groupId) {
-    return res.status(400).json({ error: "Missing groupId" });
-  }
+  const groupId =
+    (req.query.groupId as string) ||
+    (rawBody.groupId as string) ||
+    process.env.VITE_COUPLE_ID ||
+    "arthur-namorada-2026";
 
   try {
     const result = await processApplePayEvent(db, groupId, rawBody);

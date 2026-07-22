@@ -34,127 +34,48 @@ A gestão financeira é um dos maiores desafios para casais. O DualPay resolve i
 
 ---
 
-## 📱 Apple Pay Offline — Arquitetura de Outbox
+## 📱 Integração Apple Pay (Online & Offline)
 
-> **Problema:** Quando o iPhone está sem internet ao fazer uma compra, o Atalho não consegue enviar o POST para a Vercel e a transação se perde.
->
-> **Solução:** O Atalho grava o evento localmente *antes* de tentar enviar. Um segundo Atalho de sincronização reprocessa a fila quando a internet voltar. O backend é **idempotente**: reenvios do mesmo evento não criam duplicatas.
-
-### Fluxo Completo
-
-```
-[Compra Apple Pay]
-       ↓
-[Atalho 1: CasalPay Apple Pay]
-  1. Gera clientEventId único
-  2. Grava linha JSON em: Arquivos/Atalhos/CasalPay/apple-pay-outbox.jsonl  ← ANTES da rede
-  3. Tenta POST /api/webhook-apple-pay
-     ✓ Online  → despesa vai para Pendentes no app
-     ✗ Offline → linha fica no arquivo (sem erro visível)
-
-[Atalho 2: CasalPay Sync Outbox]
-  1. Lê apple-pay-outbox.jsonl
-  2. POST /api/sync-apple-pay-outbox com { events: [...] }
-  3. Mostra resumo: X criados | Y duplicados | Z falhas
-
-[Backend Firestore]
-  couples/{coupleId}/apple_pay_events/{clientEventId}
-       ↓ (chave de idempotência — impede duplicatas)
-  couples/{coupleId}/transactions/{id}
-```
+Com a nova API simplificada, a automação no iPhone funciona de forma **ultra simples**, capturando a compra do Apple Pay instantaneamente.
 
 ---
 
-### Atalho 1 — "CasalPay Apple Pay" (gatilho de compra)
+### ⚙️ Como configurar a Automação no iPhone (Zara e Arthur)
 
-Configure este Atalho para **disparar automaticamente** a cada notificação de aprovação de compra do Nubank/banco (usando Automações → App → Abrir).
-
-#### Variáveis de entrada
-| Campo | Fonte |
-|---|---|
-| `amount` | Texto da notificação Apple Pay (ex: `R$ 39,69`) |
-| `description` | Nome do estabelecimento |
-| `date` | Data atual (`Data` → formatar como `YYYY-MM-DD`) |
-
-#### Passos do Atalho
-
-```
-1. [Receber entrada] Texto — valor da notificação
-2. [Variável] → amount = entrada recebida
-3. [Data] → Hoje → Formatar como "yyyy-MM-dd" → date
-4. [Texto] → description = "Nome do estabelecimento" (ou variável da notificação)
-
-5. [Texto] → Montar clientEventId:
-   "zara_" + date + "T" + [Hora atual → HH:mm:ss] + "_" + amount + "_" + description
-   (substitua espaços/barras por "_" com Substituir Texto)
-
-6. [Dicionário] → Montar payload JSON:
-   {
-     "clientEventId": [clientEventId],
-     "amount": [amount],
-     "description": [description],
-     "date": [date],
-     "deviceUser": "Zara",
-     "source": "ios-shortcut-apple-pay",
-     "capturedAt": [Data/Hora atual ISO]
-   }
-
-7. [Acrescentar ao arquivo de texto]
-   Arquivo: Atalhos/CasalPay/apple-pay-outbox.jsonl
-   Texto: [Dicionário como JSON] + nova linha
-   ⚠️ ESTE PASSO É ANTES DA REDE — garante que o evento não se perca
-
-8. [Obter conteúdo do URL]
-   URL: https://casalpay.vercel.app/api/webhook-apple-pay
-   Método: POST
-   Headers:
-     Authorization: Bearer casalpayarthurzara
-     Content-Type: application/json
-   Corpo: [Dicionário como JSON]
-   Permitir falha: ✓ (não travar o Atalho se offline)
-
-9. [Se] resultado da URL contém "ok" → [Notificação] "✅ Compra registrada"
-   [Senão]                              → [Notificação] "📥 Salvo offline — sincronize depois"
-```
+#### 1. Criar o Atalho de Compra
+No aplicativo **Atalhos (Shortcuts)** do iPhone:
+1. Vá na aba **Automação** → toque em **+** (Nova Automação).
+2. Escolha o gatilho **Transação** (ou **Carteira / Wallet** no iOS 17+).
+3. Marque **Qualquer Cartão** e **Executar Imediatamente** (desmarque "Notificar ao Executar" para rodar silenciosamente em segundo plano).
+4. Adicione as ações:
+   - **Obter Valor da Transação** / **Comerciante** / **Data** a partir da *Entrada do Atalho*.
+   - **Acrescentar ao Arquivo:** Salve 1 linha JSON simples no arquivo `Shortcuts/CasalPay/outbox.txt`. *(Garante que a compra não se perca se você estiver sem internet)*.
+   - **Obter Conteúdo da URL (POST):**
+     - **URL:** `https://casalpay.vercel.app/api/webhook-apple-pay?secret=SUA_SENHA_AQUI`
+     - **Método:** `POST`
+     - **Corpo (JSON):**
+       ```json
+       {
+         "amount": "Entrada do Atalho -> Valor",
+         "description": "Entrada do Atalho -> Comerciante",
+         "date": "Data Atual (yyyy-MM-dd)",
+         "deviceUser": "Zara"
+       }
+       ```
+   - **Se o envio for bem-sucedido:** Apague a linha recém-enviada do `outbox.txt`.
 
 ---
 
-### Atalho 2 — "CasalPay Sync Outbox" (sincronização)
-
-#### Passos do Atalho
-
-```
-1. [Obter arquivo de texto]
-   Arquivo: Atalhos/CasalPay/apple-pay-outbox.jsonl
-
-2. [Dividir texto] → Separador: Nova linha
-   → Lista de linhas JSON
-
-3. [Repetir com cada item da lista]
-   → Se item não estiver vazio:
-     [Obter conteúdo do URL]
-       URL: https://casalpay.vercel.app/api/sync-apple-pay-outbox
-       Método: POST
-       Headers:
-         Authorization: Bearer casalpayarthurzara
-         Content-Type: application/json
-       Corpo: { "events": [ [item JSON] ] }
-
-4. [Variável] → Contar: criados / duplicados / falhas a partir das respostas
-
-5. [Notificação] "Sync concluído: X criados, Y duplicados, Z falhas"
-```
-
-> **Dica:** Para envio em lote de uma vez (mais eficiente), colete todas as linhas em um array e envie um único POST para `/api/sync-apple-pay-outbox` com `{ "events": [linha1, linha2, ...] }`.
-
-#### Automações recomendadas (Atalhos → Automação Pessoal)
-| Gatilho | Ação |
-|---|---|
-| Abrir app CasalPay | Executar "CasalPay Sync Outbox" |
-| Wi-Fi conectado | Executar "CasalPay Sync Outbox" |
-| Saída do Modo Avião | Executar "CasalPay Sync Outbox" |
-| Todos os dias às 08:00 | Executar "CasalPay Sync Outbox" |
-| Todos os dias às 22:00 | Executar "CasalPay Sync Outbox" |
+#### 2. Criar a Automação de Sincronização Offline (Para quando reconectar a internet)
+No aplicativo **Atalhos**:
+1. Crie uma nova Automação Pessoal com o gatilho **"Ao Conectar ao Wi-Fi"** ou **"Ao Abrir o App CasalPay"**.
+2. Ação:
+   - **Obter arquivo de texto:** `Shortcuts/CasalPay/outbox.txt`.
+   - Se o arquivo contiver linhas:
+     - **Obter Conteúdo da URL (POST):**
+       - **URL:** `https://casalpay.vercel.app/api/sync-apple-pay-outbox?secret=SUA_SENHA_AQUI`
+       - **Corpo (JSON):** `{ "events": [ Linhas do outbox.txt ] }`
+     - Limpar/Apagar o arquivo `outbox.txt`.
 
 ---
 

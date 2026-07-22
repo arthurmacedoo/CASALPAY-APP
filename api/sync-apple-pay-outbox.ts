@@ -56,6 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ── Autenticação ──────────────────────────────────────────────────────────
   const authHeader     = req.headers.authorization ?? "";
+  const querySecret    = (req.query.secret as string) || (req.query.token as string) || "";
   const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 
   if (!WEBHOOK_SECRET) {
@@ -63,8 +64,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: "Server config error" });
   }
 
-  if (authHeader !== `Bearer ${WEBHOOK_SECRET}`) {
-    console.warn("[sync] Token inválido:", authHeader.slice(0, 20));
+  const isAuthHeaderValid = authHeader === `Bearer ${WEBHOOK_SECRET}`;
+  const isQuerySecretValid = querySecret === WEBHOOK_SECRET;
+
+  if (!isAuthHeaderValid && !isQuerySecretValid) {
+    console.warn("[sync] Token/Secret inválido");
     return res.status(401).json({ error: "Unauthorized" });
   }
 
