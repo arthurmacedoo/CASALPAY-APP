@@ -34,9 +34,16 @@ export function isInvoiceTransactionForMember(
   member: GroupMember | null
 ): boolean {
   if (!member) return false;
+  if (transaction.visibility !== "personal") return false;
+
+  // Documentos antigos podem ter sido confirmados sem o dono explícito.
+  // Nesse caso, preserve a visibilidade histórica pelo UID de quem pagou;
+  // quando o dono estiver gravado, ele continua sendo a fonte de verdade.
   return (
-    transaction.visibility === "personal" &&
-    transaction.personalOwnerUserId === member.userId
+    transaction.personalOwnerUserId === member.userId ||
+    (!transaction.personalOwnerUserId &&
+      transaction.type === "expense" &&
+      transaction.paidByUserId === member.userId)
   );
 }
 

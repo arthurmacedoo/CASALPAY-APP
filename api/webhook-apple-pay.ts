@@ -138,7 +138,7 @@ async function saveFallbackExpense(
     amount:      1,
     date:        fallbackDate,
     monthKey:    getMonthKey(fallbackDate),
-    groupId,
+    coupleId:      groupId,
     paidByUserId: null,
     personalOwnerUserId: null,
     splitMode:   "personal",
@@ -408,7 +408,9 @@ export async function processApplePayEvent(
     amount:      amountCents,
     date:        finalDate,
     monthKey,
-    groupId,
+    // A subcoleção já usa groupId no caminho; no documento, mantenha apenas
+    // o campo de compatibilidade coupleId. groupId é reservado ao grupo de parcelas.
+    coupleId:    groupId,
     paidByUserId: null,
     personalOwnerUserId: null,
     splitMode:   "personal",

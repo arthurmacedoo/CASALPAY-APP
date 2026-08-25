@@ -7,6 +7,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   serverTimestamp,
   writeBatch,
   getDocs,
@@ -202,7 +203,15 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
       if (!group) throw new Error("Grupo não carregado.");
       const activeGroupId = group.id;
 
-      const wasInstallment = originalTransaction.type === "expense" && Boolean(originalTransaction.groupId);
+      // Apenas despesas com metadados completos de parcelamento entram no fluxo
+      // de apagar e recriar parcelas. O webhook usa coupleId para o grupo; um
+      // groupId isolado não pode ser interpretado como grupo de parcelas.
+      const wasInstallment =
+        originalTransaction.type === "expense" &&
+        Boolean(
+          originalTransaction.groupId &&
+          (originalTransaction.installmentCount ?? 0) > 1
+        );
       const willBeInstallment = data.type === "expense" && Boolean(data.isInstallment) && (data.installmentCount ?? 0) > 1;
 
       // ─ Helper: resolve visibility + personalOwnerUserId do novo formato ─
@@ -342,6 +351,9 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
           splitMode: data.splitMode,
           visibility,
           personalOwnerUserId: personalOwnerUserId ?? null,
+          // Se o documento antigo tinha um groupId inválido, não o carregue
+          // para futuras edições, onde ele poderia parecer parcelamento.
+          groupId: deleteField(),
         };
       } else {
         const { visibility, personalOwnerUserId } = resolveSettlementVisibility(data);

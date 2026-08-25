@@ -97,7 +97,14 @@ export const AddExpensePage: React.FC = () => {
           paidByUserId: editTransaction.paidByUserId ?? defaultPayerUid,
           splitBetweenUserIds: editTransaction.splitBetweenUserIds ?? memberIds,
           splitMode: editTransaction.splitMode ?? "equal",
-          personalOwnerUserId: editTransaction.personalOwnerUserId ?? null,
+          // Compras vindas do webhook ainda não têm dono de fatura. Ao revisar,
+          // o usuário autenticado é o dono padrão; a seleção abaixo continua
+          // permitindo corrigir para o outro membro antes de confirmar.
+          personalOwnerUserId:
+            editTransaction.personalOwnerUserId ??
+            (editTransaction.status === "pending"
+              ? (editTransaction.paidByUserId ?? user?.uid ?? defaultPayerUid)
+              : null),
           isInstallment,
           installmentCount: isInstallment ? (editTransaction.installmentCount ?? 2) : 2,
         } satisfies ExpenseFormData;
