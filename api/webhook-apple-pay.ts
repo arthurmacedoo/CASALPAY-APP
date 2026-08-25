@@ -1,8 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getApps } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import { getMessaging } from "firebase-admin/messaging";
+
 import { initFirebaseAdmin } from "./_firebase-admin.js";
+import { sendPendingExpenseRegistered, sendPushToGroup } from "./push.js";
 
 // Inicializa Firebase Admin SDK
 initFirebaseAdmin();
@@ -161,9 +162,8 @@ async function saveFallbackExpense(
 }
 
 /**
- * Envia uma notificação para TODOS os tokens FCM do casal de uma vez.
- * Usa sendEachForMulticast para evitar notificações duplicadas.
- * Best-effort: nunca lança exceção.
+ * Envia um alerta crítico de forma best-effort e data-only.
+ * O service worker é o único responsável pela exibição em background.
  */
 async function sendCriticalAlert(
   db: FirebaseFirestore.Firestore,
@@ -173,110 +173,24 @@ async function sendCriticalAlert(
   if (!getApps().length) return;
 
   try {
-    const messaging = getMessaging();
-
-    const tokensSnap = await db
-      .collection("groups")
-      .doc(groupId)
-      .collection("fcm_tokens")
-      .get();
-
-    const tokens: string[] = [];
-    tokensSnap.forEach((doc) => {
-      const token = doc.data()?.token;
-      if (token && typeof token === "string" && !tokens.includes(token)) {
-        tokens.push(token);
-      }
+    const result = await sendPushToGroup(db, {
+      groupId,
+      title: "🚨 CasalPay — Alerta Apple Pay",
+      body: message,
+      tag: "casalpay-critical-alert",
+      kind: "system",
     });
 
-    if (tokens.length === 0) {
-      console.warn("[webhook] Nenhum token FCM encontrado para notificar.");
-      return;
-    }
-
-    const response = await messaging.sendEachForMulticast({
-      tokens,
-      notification: {
-        title: "🚨 CasalPay — Alerta Apple Pay",
-        body:  message,
-      },
-      webpush: {
-        notification: {
-          icon:  "/icon-192.png",
-          badge: "/icon-192.png",
-          tag:   "casalpay-critical-alert",
-        },
-        headers: { Urgency: "high", TTL: "300" },
-      },
-    });
-
-    console.log(`[webhook] Notificação enviada: ${response.successCount} ok, ${response.failureCount} falha(s).`);
+    console.log(`[webhook] Alerta enviado: ${result.successCount} ok, ${result.failureCount} falha(s).`);
   } catch (notifErr) {
     const msg = notifErr instanceof Error ? notifErr.message : String(notifErr);
     console.error("[webhook] Falha ao enviar alerta FCM:", msg);
   }
 }
 
-/**
- * Envia uma notificação push padrão para todos os membros do grupo.
- */
-async function sendGroupPush(
-  db: FirebaseFirestore.Firestore,
-  groupId: string,
-  title: string,
-  body: string
-): Promise<void> {
-  if (!getApps().length) return;
 
-  try {
-    const messaging = getMessaging();
 
-    const tokensSnap = await db
-      .collection("groups")
-      .doc(groupId)
-      .collection("fcm_tokens")
-      .get();
 
-    const tokens: string[] = [];
-    tokensSnap.forEach((doc) => {
-      const token = doc.data()?.token;
-      if (token && typeof token === "string" && !tokens.includes(token)) {
-        tokens.push(token);
-      }
-    });
-
-    if (tokens.length === 0) {
-      console.warn(`[webhook] Nenhum token FCM encontrado no grupo "${groupId}" para enviar push.`);
-      return;
-    }
-
-    const response = await messaging.sendEachForMulticast({
-      tokens,
-      notification: {
-        title,
-        body,
-      },
-      data: {
-        title,
-        body,
-        url: "/history",
-      },
-      webpush: {
-        notification: {
-          icon:  "/icon-192.png",
-          badge: "/icon-192.png",
-          tag:   "casalpay-pending-expense",
-        },
-        headers: { Urgency: "high", TTL: "86400" },
-      },
-    });
-
-    console.log(`[webhook] Push enviado para o grupo "${groupId}": ${response.successCount} ok, ${response.failureCount} falhas.`);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("[webhook] Falha ao enviar push para o grupo:", msg);
-  }
-}
 
 
 /**
@@ -443,6 +357,22 @@ export async function processApplePayEvent(
     });
   }
 
+  // O aviso acontece depois da persistência e também vale para eventos
+  // recebidos pelo endpoint de sincronização offline.
+  try {
+    const pushResult = await sendPendingExpenseRegistered(db, groupId, {
+      amountCents,
+      description,
+      deviceUser: rawBody.deviceUser,
+    });
+    console.log(
+      `[webhook] Aviso de pendência enviado: ${pushResult.successCount}/${pushResult.tokenCount} dispositivo(s)`
+    );
+  } catch (pushErr) {
+    // Push é best-effort: uma falha de notificação não desfaz a compra salva.
+    console.error("[webhook] Falha ao enviar aviso de pendência:", pushErr);
+  }
+
   const result: ProcessEventResult = {
     ok:         true,
     id:         ref.id,
@@ -516,20 +446,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         db,
         groupId,
         `Compra Apple Pay com valor irrecuperável. Motivo: "${result.reason}". Verifique a aba Pendentes.`
-      ).catch(console.error);
-    } else if (result.ok && !result.duplicate) {
-      // Dispara push de sucesso para despesa pendente
-      const amountStr = result.amountCents 
-        ? `R$ ${(result.amountCents / 100).toFixed(2).replace(".", ",")}`
-        : "com valor indefinido";
-      const desc = result.description || "Compra Apple Pay";
-      const userText = rawBody.deviceUser ? ` por ${rawBody.deviceUser}` : "";
-      
-      sendGroupPush(
-        db,
-        groupId,
-        "🛒 Novo gasto pendente",
-        `Gasto de ${amountStr} em "${desc}"${userText} registrado na aba Pendentes.`
       ).catch(console.error);
     }
 

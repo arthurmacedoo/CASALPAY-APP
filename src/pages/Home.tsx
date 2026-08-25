@@ -122,9 +122,14 @@ export const HomePage: React.FC = () => {
   const [isGroupSheetOpen, setIsGroupSheetOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const requestedView = new URLSearchParams(window.location.search).get("view");
+    if (requestedView === "shared" || requestedView === "personal" || requestedView === "pending") {
+      return requestedView;
+    }
+
     const stored = sessionStorage.getItem("casalpay_viewMode");
-    return (stored === "shared" || stored === "personal" || stored === "pending") 
-      ? (stored as ViewMode) 
+    return (stored === "shared" || stored === "personal" || stored === "pending")
+      ? (stored as ViewMode)
       : "shared";
   });
 

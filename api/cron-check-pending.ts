@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getApps } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import { getMessaging } from "firebase-admin/messaging";
 import { initFirebaseAdmin } from "./_firebase-admin.js";
+import { sendPushToGroup } from "./push.js";
 
 // Inicializa Firebase Admin SDK
 initFirebaseAdmin();
@@ -42,7 +42,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const db = getFirestore();
-  const messaging = getMessaging();
 
   try {
     console.log("[cron] Iniciando verificação diária de despesas pendentes...");
@@ -75,64 +74,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const results: Array<{ groupId: string; pendingCount: number; status: string; detail?: string }> = [];
 
-    // 3. Para cada grupo, busca os tokens FCM e envia a notificação consolidada
+        // 3. Para cada grupo, envia um lembrete consolidado e data-only.
+    // O service worker é o único responsável por exibir a notificação em background,
+    // evitando duplicidade entre payload notification e showNotification.
     for (const [groupId, pendingCount] of groupsWithPending.entries()) {
       try {
-        const tokensSnap = await db
-          .collection("groups")
-          .doc(groupId)
-          .collection("fcm_tokens")
-          .get();
+        const title = "🟢 Pendências aguardando revisão";
+        const body = pendingCount === 1
+          ? "Você tem 1 despesa na aba Pendentes. Abra o CasalPay para confirmar."
+          : `Você tem ${pendingCount} despesas na aba Pendentes. Abra o CasalPay para confirmar.`;
 
-        const tokens: string[] = [];
-        tokensSnap.forEach((docSnap) => {
-          const token = docSnap.data()?.token;
-          if (token && typeof token === "string" && !tokens.includes(token)) {
-            tokens.push(token);
-          }
+        const pushResult = await sendPushToGroup(db, {
+          groupId,
+          title,
+          body,
+          url: "/?view=pending",
+          tag: "casalpay-pending-daily-reminder",
+          kind: "pending-daily-reminder",
         });
 
-        if (tokens.length === 0) {
+        if (pushResult.tokenCount === 0) {
           console.warn(`[cron] Grupo "${groupId}" tem ${pendingCount} pendência(s), mas nenhum token FCM registrado.`);
           results.push({ groupId, pendingCount, status: "no_tokens" });
           continue;
         }
 
-        const title = "📝 Lembrete de Pendências";
-        const body = pendingCount === 1
-          ? "Você tem 1 despesa pendente aguardando aprovação. Vamos organizar?"
-          : `Você tem ${pendingCount} despesas pendentes aguardando aprovação. Vamos organizar?`;
+        if (pushResult.successCount === 0) {
+          console.warn(`[cron] Nenhum dispositivo aceitou o lembrete do grupo "${groupId}".`);
+          results.push({
+            groupId,
+            pendingCount,
+            status: "error",
+            detail: `${pushResult.failureCount} falha(s) no FCM; tokens inválidos foram removidos quando aplicável`,
+          });
+          continue;
+        }
 
-        const response = await messaging.sendEachForMulticast({
-          tokens,
-          notification: {
-            title,
-            body,
-          },
-          data: {
-            title,
-            body,
-            url: "/history", // Redireciona para o Histórico/Pendentes
-          },
-          webpush: {
-            notification: {
-              icon: "/icon-192.png",
-              badge: "/icon-192.png",
-              tag: "casalpay-pending-cron-reminder",
-            },
-            headers: { Urgency: "high", TTL: "86400" },
-          },
-        });
-
-        console.log(`[cron] Notificação enviada para o grupo "${groupId}": ${response.successCount} ok, ${response.failureCount} falhas.`);
-        results.push({ 
-          groupId, 
-          pendingCount, 
-          status: "sent", 
-          detail: `${response.successCount} enviado(s), ${response.failureCount} falha(s)` 
+        console.log(`[cron] Lembrete enviado para o grupo "${groupId}": ${pushResult.successCount} ok, ${pushResult.failureCount} falha(s).`);
+        results.push({
+          groupId,
+          pendingCount,
+          status: "sent",
+          detail: `${pushResult.successCount} enviado(s), ${pushResult.failureCount} falha(s)`
         });
 
       } catch (groupErr: any) {
+
         console.error(`[cron] Falha ao processar notificações do grupo "${groupId}":`, groupErr.message);
         results.push({ groupId, pendingCount, status: "error", detail: groupErr.message });
       }

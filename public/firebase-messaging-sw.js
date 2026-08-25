@@ -1,8 +1,8 @@
 // firebase-messaging-sw.js
 // Service Worker do Firebase Cloud Messaging — escopo isolado do SW do PWA/Workbox.
-// O SDK FCM exibe as notificações automaticamente ao receber payloads com a chave "notification".
-// NÃO usar onBackgroundMessage + showNotification — isso duplicaria as notificações.
-// O fcmOptions.link no backend já cuida do clique → abre /messages.
+// O backend envia payloads data-only para que este service worker controle
+// a exibição em background sem duplicar notificações do SDK FCM.
+// O clique usa a rota enviada em data.url, normalmente /?view=pending.
 
 importScripts('https://www.gstatic.com/firebasejs/11.0.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/11.0.0/firebase-messaging-compat.js');
@@ -23,10 +23,13 @@ messaging.onBackgroundMessage((payload) => {
 
   const data = payload.data || {};
   const notificationTitle = data.title || "CasalPay";
+  const isPendingNotification =
+    data.type === "pending-expense-registered" ||
+    data.type === "pending-daily-reminder";
   const notificationOptions = {
     body: data.body,
     icon: data.icon || "/icon-192.png",
-    badge: data.badge || "/icon-192.png",
+    badge: data.badge || (isPendingNotification ? "/pending-badge.svg" : "/icon-192.png"),
     tag: data.tag || "casalpay-msg",
     data: {
       url: data.url || "/messages",

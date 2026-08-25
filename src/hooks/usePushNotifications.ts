@@ -125,17 +125,36 @@ export function usePushNotifications(user: User | null, activeGroupId: string | 
         return;
       }
 
-      // 4. Exibe toast in-app quando chegar mensagem com o app em FOREGROUND
+      // 4. Exibe feedback in-app quando chegar mensagem em foreground.
+      // O backend envia data-only; assim não há uma segunda notificação do SDK.
       const unsubscribe = onMessage(messaging, (payload) => {
         const title = payload.notification?.title || payload.data?.title;
         const body = payload.notification?.body || payload.data?.body;
-        
+        const kind = payload.data?.type;
+
         if (!title) return;
         console.log("[FCM] Mensagem em foreground recebida:", title, body);
-        toast(`${title}\n${body ?? ""}`, {
-          icon: "💌",
-          duration: 5000,
-        });
+
+        const isPendingNotification =
+          kind === "pending-expense-registered" ||
+          kind === "pending-daily-reminder";
+
+        if (isPendingNotification) {
+          toast.success(`${title}\n${body ?? ""}`, {
+            icon: "✅",
+            duration: 6000,
+            style: {
+              border: "1px solid rgba(74, 222, 128, 0.45)",
+              background: "#17251c",
+              color: "#bbf7d0",
+            },
+          });
+        } else {
+          toast(`${title}\n${body ?? ""}`, {
+            icon: "💌",
+            duration: 5000,
+          });
+        }
       });
 
       return unsubscribe;
