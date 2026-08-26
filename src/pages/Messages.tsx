@@ -8,6 +8,12 @@ import {
   OWNER_EMOJI,
   PARTNER_EMOJI,
 } from "../constants/couple";
+import {
+  APP_BUILD,
+  APP_RELEASE_DATE,
+  APP_RELEASE_NAME,
+  APP_VERSION,
+} from "../constants/version";
 
 // ─── Mensagens disponíveis ─────────────────────────────────────────────────
 interface LoveMessage {
@@ -239,6 +245,29 @@ export const MessagesPage: React.FC = () => {
           </p>
         </div>
       )}
+
+      {/* ── Versão instalada ──────────────────────────────────────────────── */}
+      <div className="px-5 mt-4 animate-fade-in-up" style={{ animationDelay: "50ms" }}>
+        <div className="card border border-accent-green/25 bg-accent-green/5">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-green/15 border border-accent-green/30 text-lg text-accent-green">
+              ✓
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-text-primary">Versão instalada</p>
+              <p className="text-xs text-accent-green font-medium mt-0.5">
+                v{APP_VERSION} · {APP_RELEASE_NAME}
+              </p>
+              <p className="text-[10px] text-text-muted mt-0.5">
+                Build {APP_BUILD} · publicada em {APP_RELEASE_DATE}
+              </p>
+            </div>
+          </div>
+          <p className="text-[10px] text-text-muted leading-relaxed mt-3 border-t border-accent-green/15 pt-3">
+            Se esta versão aparecer aqui, este aparelho já carregou a atualização das notificações de Pendentes.
+          </p>
+        </div>
+      </div>
 
       {/* ── Card "De → Para" ──────────────────────────────────────────────── */}
       <div className="px-5 mt-5 animate-fade-in-up">
