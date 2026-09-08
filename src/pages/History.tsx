@@ -216,24 +216,22 @@ export const HistoryPage: React.FC = () => {
             <span className="text-3xl">⚠️</span>
             <p className="text-text-secondary">{error}</p>
           </div>
-        ) : transactions.length === 0 ? (
+        ) : filteredTransactions.length === 0 ? (
           <div className="card flex flex-col items-center py-12 gap-3 text-center">
-            <span className="text-4xl">📅</span>
+            <span className="text-4xl">{searchTerm ? "🔍" : (activeTab === "personal" ? "💳" : "📅")}</span>
             <p className="text-text-secondary font-medium">
-              Sem despesas em {monthLabel}
+              {searchTerm
+                ? "Nenhum resultado encontrado"
+                : activeTab === "personal"
+                ? "Nenhuma despesa nesta fatura neste mês"
+                : `Sem despesas em ${monthLabel}`}
             </p>
             <p className="text-text-muted text-sm max-w-xs">
-              Selecione outro mês ou adicione uma nova despesa.
-            </p>
-          </div>
-        ) : filteredTransactions.length === 0 && searchTerm ? (
-          <div className="card flex flex-col items-center py-12 gap-3 text-center">
-            <span className="text-4xl">🔍</span>
-            <p className="text-text-secondary font-medium">
-              Nenhum resultado encontrado
-            </p>
-            <p className="text-text-muted text-sm max-w-xs">
-              Não encontramos despesas para "{searchTerm}".
+              {searchTerm
+                ? `Não encontramos despesas para "${searchTerm}".`
+                : activeTab === "personal"
+                ? "Não há compras ou despesas pessoais registradas para este período."
+                : "Selecione outro mês ou adicione uma nova despesa."}
             </p>
           </div>
         ) : (

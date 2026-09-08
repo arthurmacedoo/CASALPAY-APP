@@ -248,6 +248,8 @@ export interface DirectDebt {
   sources:     DebtSource[];
   /** Acertos que já abateram esta dívida */
   settlements: DebtSettlement[];
+  /** Despesas em sentido contrário que geraram compensação mútua (abatimento) */
+  nettingSources?: DebtSource[];
 }
 
 export interface BalanceSummary {

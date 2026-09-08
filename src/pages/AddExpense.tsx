@@ -77,6 +77,14 @@ export const AddExpensePage: React.FC = () => {
     ?? members[0]?.userId
     ?? "";
 
+  // Se veio do Apple Pay (ou webhook), tenta mapear o dispositivo para o membro correspondente
+  const matchedDeviceMember = useMemo(() => {
+    if (!editTransaction || editTransaction.type !== "expense") return null;
+    const deviceName = (editTransaction as any).deviceUser?.toLowerCase().trim();
+    if (!deviceName) return null;
+    return members.find((m) => m.name.toLowerCase().includes(deviceName)) ?? null;
+  }, [editTransaction, members]);
+
   // ─── Inicialização do form (edição ou criação) ───────────────────────────
   const [form, setForm] = useState<TransactionFormData>(() => {
     if (editTransaction) {
@@ -89,21 +97,25 @@ export const AddExpensePage: React.FC = () => {
         (editTransaction.installmentCount ?? 0) > 1;
 
       if (editTransaction.type === "expense") {
+        const inferredPayer =
+          editTransaction.paidByUserId ??
+          matchedDeviceMember?.userId ??
+          defaultPayerUid;
+
         return {
           type: "expense",
           description: editTransaction.description,
           amount: (displayAmount / 100).toFixed(2).replace(".", ","),
           date: editTransaction.date,
-          paidByUserId: editTransaction.paidByUserId ?? defaultPayerUid,
+          paidByUserId: inferredPayer,
           splitBetweenUserIds: editTransaction.splitBetweenUserIds ?? memberIds,
-          splitMode: editTransaction.splitMode ?? "equal",
-          // Compras vindas do webhook ainda não têm dono de fatura. Ao revisar,
-          // o usuário autenticado é o dono padrão; a seleção abaixo continua
-          // permitindo corrigir para o outro membro antes de confirmar.
+          splitMode: editTransaction.splitMode ?? "personal",
+          // Compras do Apple Pay têm dono pré-selecionado baseado no deviceUser
+          // (ex: Zara), pagador ou usuário logado
           personalOwnerUserId:
             editTransaction.personalOwnerUserId ??
             (editTransaction.status === "pending"
-              ? (editTransaction.paidByUserId ?? user?.uid ?? defaultPayerUid)
+              ? (matchedDeviceMember?.userId ?? editTransaction.paidByUserId ?? user?.uid ?? defaultPayerUid)
               : null),
           isInstallment,
           installmentCount: isInstallment ? (editTransaction.installmentCount ?? 2) : 2,
@@ -231,7 +243,20 @@ export const AddExpensePage: React.FC = () => {
 
       setTimeout(() => {
         setShowSuccess(false);
-        if (isEditing) navigate(-1);
+        if (isEditing) {
+          if (editTransaction?.status === "pending") {
+            if (submitData.type === "expense" && submitData.splitMode === "personal") {
+              const targetOwnerId = submitData.personalOwnerUserId || submitData.paidByUserId;
+              sessionStorage.setItem("casalpay_viewMode", "personal");
+              navigate(`/?view=personal&member=${targetOwnerId}`, { replace: true });
+            } else {
+              sessionStorage.setItem("casalpay_viewMode", "shared");
+              navigate("/?view=shared", { replace: true });
+            }
+          } else {
+            navigate(-1);
+          }
+        }
       }, 1200);
     } catch (err) {
       console.error("Erro ao salvar:", err);
@@ -463,11 +488,17 @@ export const AddExpensePage: React.FC = () => {
                       key={m.userId}
                       type="button"
                       onClick={() =>
-                        setForm((f) =>
-                          f.type === "expense"
-                            ? { ...f, paidByUserId: m.userId }
-                            : f
-                        )
+                        setForm((f) => {
+                          if (f.type !== "expense") return f;
+                          const willSyncOwner =
+                            f.splitMode === "personal" &&
+                            (!f.personalOwnerUserId || f.personalOwnerUserId === f.paidByUserId);
+                          return {
+                            ...f,
+                            paidByUserId: m.userId,
+                            personalOwnerUserId: willSyncOwner ? m.userId : f.personalOwnerUserId,
+                          };
+                        })
                       }
                       className={`chip ${isSelected ? "chip-selected-blue" : ""}`}
                     >

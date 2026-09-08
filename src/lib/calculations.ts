@@ -170,19 +170,21 @@ function buildDirectDebts(
       result.push({
         debtorId,
         creditorId,
-        amount:      net,
-        rawAmount:   forwardGross,   // bruto REAL das despesas (sem abatimento)
-        sources:     entry.sources,
-        settlements: allSettlements,
+        amount:         net,
+        rawAmount:      forwardGross,   // bruto REAL das despesas (sem abatimento)
+        sources:        entry.sources,
+        settlements:    allSettlements,
+        nettingSources: reverseEntry?.sources ?? [],
       });
     } else if (net < 0) {
       result.push({
-        debtorId:    creditorId,
-        creditorId:  debtorId,
-        amount:      -net,
-        rawAmount:   reverseGross,   // bruto REAL da direção inversa
-        sources:     reverseEntry?.sources ?? [],
-        settlements: allSettlements,
+        debtorId:       creditorId,
+        creditorId:     debtorId,
+        amount:         -net,
+        rawAmount:      reverseGross,   // bruto REAL da direção inversa
+        sources:        reverseEntry?.sources ?? [],
+        settlements:    allSettlements,
+        nettingSources: entry.sources,
       });
     }
     // net === 0 → par zerado, nada a exibir

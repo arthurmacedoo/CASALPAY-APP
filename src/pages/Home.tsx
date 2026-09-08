@@ -2,12 +2,12 @@ import React, { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useTransactions } from "../hooks/useTransactions";
-import { deleteDoc, setDoc } from "firebase/firestore";
-import { transactionDocRef, COUPLE_ID, userDocRef } from "../lib/firebase";
+import { deleteDoc, setDoc, addDoc, serverTimestamp } from "firebase/firestore";
+import { transactionDocRef, transactionsRef, COUPLE_ID, userDocRef } from "../lib/firebase";
 import { useAuthContext } from "../contexts/AuthContext";
 import { usePendingTransactions } from "../hooks/usePendingTransactions";
 import { calculateBalance, generatePixSummary } from "../lib/calculations";
-import { getCurrentMonthKey, formatMonthLabel, formatBRL, formatDateBR } from "../lib/formatters";
+import { getCurrentMonthKey, formatMonthLabel, formatBRL, formatDateBR, getTodayDateString } from "../lib/formatters";
 import { BalanceCard } from "../components/BalanceCard";
 import { TransactionItem } from "../components/TransactionItem";
 import { AnniversaryCountdown } from "../components/AnniversaryCountdown";
@@ -30,11 +30,29 @@ type ViewMode = "shared" | "personal" | "pending";
 // ── Card de transação pendente ────────────────────────────────────────────────
 const PendingTransactionCard: React.FC<{
   transaction: Transaction;
+  members: any[];
   onReview: (t: Transaction) => void;
+  onQuickConfirm: (t: Transaction) => void;
   onDelete: (t: Transaction) => void;
-}> = ({ transaction, onReview, onDelete }) => {
+}> = ({ transaction, members, onReview, onQuickConfirm, onDelete }) => {
   const isExpense = transaction.type === "expense";
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  const deviceName = (transaction as any).deviceUser;
+  const inferredMember = deviceName
+    ? members.find((m) => m.name?.toLowerCase().includes(deviceName.toLowerCase()))
+    : null;
+  const ownerLabel = inferredMember ? inferredMember.name.split(" ")[0] : deviceName || "Membro";
+
+  const handleConfirm = async () => {
+    setConfirming(true);
+    try {
+      await onQuickConfirm(transaction);
+    } finally {
+      setConfirming(false);
+    }
+  };
 
   return (
     <div className="card border-l-4 border-l-amber-400/70 animate-fade-in-up">
@@ -51,8 +69,11 @@ const PendingTransactionCard: React.FC<{
             {" · "}
             <span className="text-amber-400 font-medium">Aguardando revisão</span>
           </p>
-          <p className="text-xs text-text-muted">
-            Classificação atual: Minha Fatura / Nossos Gastos
+          <p className="text-xs text-text-muted flex items-center gap-1.5 flex-wrap">
+            <span>Classificação:</span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent-pink/15 text-accent-pink font-medium text-[11px]">
+              💳 Fatura de {ownerLabel}
+            </span>
           </p>
         </div>
         <div className="text-right shrink-0">
@@ -63,14 +84,21 @@ const PendingTransactionCard: React.FC<{
       </div>
       <div className="flex gap-2 mt-3 pt-3 border-t border-border">
         <button
+          onClick={handleConfirm}
+          disabled={confirming}
+          className="flex-1 py-2 text-xs font-semibold rounded-xl bg-accent-green/20 text-accent-green hover:bg-accent-green/30 transition-colors flex items-center justify-center gap-1"
+        >
+          {confirming ? <span className="spinner" /> : "⚡ Confirmar Fatura"}
+        </button>
+        <button
           onClick={() => onReview(transaction)}
-          className="flex-1 py-2 text-sm font-semibold rounded-xl bg-accent-pink/20 text-accent-pink hover:bg-accent-pink/30 transition-colors"
+          className="px-3 py-2 text-xs font-semibold rounded-xl bg-accent-pink/20 text-accent-pink hover:bg-accent-pink/30 transition-colors"
         >
           ✏️ Revisar
         </button>
         <button
           onClick={() => setIsModalOpen(true)}
-          className="px-4 py-2 text-sm font-medium rounded-xl bg-bg-elevated text-text-muted hover:text-accent-red hover:bg-accent-red/10 transition-colors"
+          className="px-3 py-2 text-xs font-medium rounded-xl bg-bg-elevated text-text-muted hover:text-accent-red hover:bg-accent-red/10 transition-colors"
         >
           🗑
         </button>
@@ -115,12 +143,17 @@ export const HomePage: React.FC = () => {
   const { group, currentMember, members } = useGroupContext();
   const currentMonth = getCurrentMonthKey();
 
-  const { transactions, loading, error } = useTransactions(currentMonth);
+  const { transactions, loading, error, updateTransaction } = useTransactions(currentMonth);
   const { pendingTransactions, pendingCount, loading: pendingLoading } = usePendingTransactions();
 
   const [copied, setCopied] = useState(false);
   const [isGroupSheetOpen, setIsGroupSheetOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [selectedInvoiceUserId, setSelectedInvoiceUserId] = useState<string>(() => {
+    const requestedMember = new URLSearchParams(window.location.search).get("member");
+    return requestedMember || user?.uid || "";
+  });
+
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const requestedView = new URLSearchParams(window.location.search).get("view");
     if (requestedView === "shared" || requestedView === "personal" || requestedView === "pending") {
@@ -138,11 +171,34 @@ export const HomePage: React.FC = () => {
     sessionStorage.setItem("casalpay_viewMode", viewMode);
   }, [viewMode]);
 
+  // Sincroniza membro selecionado da URL ou quando o usuário autentica
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedMember = params.get("member");
+    const requestedView = params.get("view");
+    if (requestedView === "shared" || requestedView === "personal" || requestedView === "pending") {
+      setViewMode(requestedView);
+    }
+    if (requestedMember) {
+      setSelectedInvoiceUserId(requestedMember);
+    } else if (user?.uid && !selectedInvoiceUserId) {
+      setSelectedInvoiceUserId(user.uid);
+    }
+  }, [user?.uid, window.location.search]);
+
   React.useEffect(() => {
     const handleHomeClick = () => setViewMode("shared");
     window.addEventListener("casalpay_home_clicked", handleHomeClick);
     return () => window.removeEventListener("casalpay_home_clicked", handleHomeClick);
   }, []);
+
+  // Membro cuja fatura está sendo visualizada na Home
+  const activeInvoiceMember = useMemo(() => {
+    return members.find((m) => m.userId === selectedInvoiceUserId) || currentMember;
+  }, [members, selectedInvoiceUserId, currentMember]);
+
+  const isViewingMyOwnInvoice = activeInvoiceMember?.userId === user?.uid;
+  const invoiceOwnerName = activeInvoiceMember?.name?.split(" ")[0] || "Pessoal";
 
   // ── Filtragem das abas compartilhada e fatura ────────────────────────────────
   const sharedTransactions = useMemo(
@@ -151,8 +207,8 @@ export const HomePage: React.FC = () => {
   );
 
   const myTransactions = useMemo(
-    () => transactions.filter((t) => isInvoiceTransactionForMember(t, currentMember)),
-    [transactions, currentMember]
+    () => transactions.filter((t) => isInvoiceTransactionForMember(t, activeInvoiceMember)),
+    [transactions, activeInvoiceMember]
   );
 
   // ── Cálculos ─────────────────────────────────────────────────────────────────
@@ -162,8 +218,8 @@ export const HomePage: React.FC = () => {
   );
 
   const myInvoiceTotal = useMemo(
-    () => calculatePersonalInvoiceTotal(myTransactions, currentMember),
-    [myTransactions, currentMember]
+    () => calculatePersonalInvoiceTotal(myTransactions, activeInvoiceMember),
+    [myTransactions, activeInvoiceMember]
   );
 
   // ── Lista ativa por aba ───────────────────────────────────────────────────────
@@ -201,12 +257,95 @@ export const HomePage: React.FC = () => {
     navigate("/add", { state: { transaction: t } });
   };
 
+  const handleQuickConfirmPending = async (t: Transaction) => {
+    if (!group) return;
+    try {
+      const deviceName = (t as any).deviceUser?.toLowerCase().trim();
+      const matchedMember = deviceName
+        ? members.find((m) => m.name.toLowerCase().includes(deviceName))
+        : null;
+      const ownerId =
+        matchedMember?.userId ??
+        (t.type === "expense" ? t.paidByUserId : t.fromUserId) ??
+        user?.uid ??
+        (members[0]?.userId ?? "");
+
+      await updateTransaction(
+        t,
+        {
+          type: "expense",
+          description: t.description || "Compra Apple Pay",
+          amount: (t.amount / 100).toFixed(2).replace(".", ","),
+          date: t.date,
+          paidByUserId: ownerId,
+          splitBetweenUserIds: members.map((m) => m.userId),
+          splitMode: "personal",
+          personalOwnerUserId: ownerId,
+          isInstallment: false,
+          installmentCount: 2,
+        },
+        t.amount
+      );
+
+      // Direciona a visão da Home para a fatura do membro com a despesa
+      setSelectedInvoiceUserId(ownerId);
+      setViewMode("personal");
+    } catch (err) {
+      console.error("Erro ao confirmar despesa pendente:", err);
+    }
+  };
+
   const handleDeletePending = async (t: Transaction) => {
     if (!group) return;
     try {
       await deleteDoc(transactionDocRef(group.id, t.id));
     } catch (err) {
       console.error("Erro ao excluir despesa pendente", err);
+    }
+  };
+
+  const [isSimulating, setIsSimulating] = useState(false);
+
+  const handleSimulateApplePay = async () => {
+    if (!group) return;
+    setIsSimulating(true);
+    try {
+      const partner = members.find((m) => m.userId !== user?.uid);
+      const targetDeviceUser = partner ? partner.name.split(" ")[0] : "Zara";
+      const descriptions = [
+        "Farmácia Drogasil",
+        "iFood - Restaurante",
+        "Uber *Viagem",
+        "Supermercado Pão de Açúcar",
+        "Zara Brasil",
+      ];
+      const randomDesc = descriptions[Math.floor(Math.random() * descriptions.length)];
+      const randomAmount = Math.floor(Math.random() * 8000) + 1500; // R$ 15,00 a R$ 95,00
+      const today = getTodayDateString();
+
+      await addDoc(transactionsRef(group.id), {
+        type: "expense",
+        description: `${randomDesc} (Apple Pay)`,
+        amount: randomAmount,
+        date: today,
+        monthKey: today.slice(0, 7),
+        coupleId: group.id,
+        paidByUserId: null,
+        personalOwnerUserId: null,
+        splitMode: "personal",
+        visibility: "personal",
+        status: "pending",
+        source: "webhook-apple-pay",
+        deviceUser: targetDeviceUser,
+        clientEventId: `sim_${Date.now()}`,
+        capturedAt: new Date().toISOString(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.error("Erro ao simular despesa Apple Pay:", err);
+    } finally {
+      setIsSimulating(false);
     }
   };
 
@@ -351,7 +490,7 @@ export const HomePage: React.FC = () => {
               viewMode === "personal" ? "text-white" : "text-text-muted hover:text-text-secondary"
             }`}
           >
-            Minha Fatura
+            {members.length > 1 ? "Fatura" : "Minha Fatura"}
           </button>
 
           <button
@@ -370,6 +509,44 @@ export const HomePage: React.FC = () => {
           </button>
         </div>
 
+        {/* ── Seletor de Fatura (quando mais de 1 membro e na aba Fatura) ─────── */}
+        {viewMode === "personal" && members.length > 1 && (
+          <div className="relative flex bg-bg-elevated rounded-xl p-1 border border-border animate-fade-in-up">
+            {/* Sliding Pill Indicator */}
+            <div className="absolute inset-1 pointer-events-none">
+              <div
+                className="h-full rounded-lg transition-transform duration-300 ease-out shadow-sm bg-accent-pink"
+                style={{
+                  width: `${100 / members.length}%`,
+                  transform: `translateX(${Math.max(
+                    0,
+                    members.findIndex((m) => m.userId === activeInvoiceMember?.userId)
+                  ) * 100}%)`,
+                }}
+              />
+            </div>
+
+            {members.map((m) => {
+              const isSelected = activeInvoiceMember?.userId === m.userId;
+              const isMe = m.userId === user?.uid;
+              const firstName = m.name?.split(" ")[0] || "Membro";
+              return (
+                <button
+                  key={m.userId}
+                  onClick={() => setSelectedInvoiceUserId(m.userId)}
+                  className={`relative z-10 flex-1 py-2 text-xs font-semibold rounded-lg transition-colors duration-300 ${
+                    isSelected
+                      ? "text-white"
+                      : "text-text-muted hover:text-text-secondary"
+                  }`}
+                >
+                  {isMe ? "Sua Fatura" : `Fatura de ${firstName}`}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* ── Card principal condicional ───────────────────────────────────────── */}
         {(loading && viewMode !== "pending") ? (
           <div className="card flex items-center justify-center py-12">
@@ -385,7 +562,7 @@ export const HomePage: React.FC = () => {
         ) : viewMode === "personal" ? (
           <div className="card animate-fade-in-up">
             <p className="text-sm text-text-muted mb-1 font-medium text-center">
-              Total da Minha Fatura
+              {isViewingMyOwnInvoice ? "Total da Minha Fatura" : `Total da Fatura (${invoiceOwnerName})`}
             </p>
             <p className="text-3xl font-bold text-center tabular-nums text-text-primary mb-3">
               {formatBRL(Math.max(0, myInvoiceTotal))}
@@ -427,7 +604,11 @@ export const HomePage: React.FC = () => {
           {viewMode !== "pending" && (
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-base font-semibold text-text-primary">
-                {viewMode === "shared" ? "Últimas despesas" : "Minha Fatura"}
+                {viewMode === "shared"
+                  ? "Últimas despesas"
+                  : isViewingMyOwnInvoice
+                  ? "Minha Fatura"
+                  : `Fatura de ${invoiceOwnerName}`}
               </h2>
               {activeTransactions.length > 5 && (
                 <button
@@ -450,40 +631,56 @@ export const HomePage: React.FC = () => {
 
           /* ── Aba Pendentes ─────────────────────────────────────────────────── */
           ) : viewMode === "pending" ? (
-            pendingTransactions.length === 0 ? (
-              <div className="card flex flex-col items-center py-10 gap-3 text-center">
-                <span className="text-4xl">✅</span>
-                <p className="text-text-secondary font-medium">Tudo em dia!</p>
-                <p className="text-text-muted text-sm max-w-xs">
-                  As compras enviadas pelo iPhone via Apple Pay/Shortcuts aparecerão aqui para revisão.
-                </p>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {pendingTransactions.map((t) => (
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                id="btn-simulate-apple-pay"
+                onClick={handleSimulateApplePay}
+                disabled={isSimulating}
+                className="w-full py-2.5 px-4 rounded-xl border border-dashed border-amber-400/50 bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 text-xs font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.99]"
+              >
+                {isSimulating ? <span className="spinner" /> : "🧪 Simular Compra Apple Pay (Teste)"}
+              </button>
+
+              {pendingTransactions.length === 0 ? (
+                <div className="card flex flex-col items-center py-10 gap-3 text-center">
+                  <span className="text-4xl">✅</span>
+                  <p className="text-text-secondary font-medium">Tudo em dia!</p>
+                  <p className="text-text-muted text-sm max-w-xs">
+                    As compras enviadas pelo iPhone via Apple Pay/Shortcuts aparecerão aqui para revisão.
+                  </p>
+                </div>
+              ) : (
+                pendingTransactions.map((t) => (
                   <PendingTransactionCard
                     key={t.id}
                     transaction={t}
+                    members={members}
                     onReview={handleReviewPending}
+                    onQuickConfirm={handleQuickConfirmPending}
                     onDelete={handleDeletePending}
                   />
-                ))}
-              </div>
-            )
-
+                ))
+              )}
+            </div>
+          ) :
           /* ── Abas shared/personal ─────────────────────────────────────────────── */
-          ) : recentTransactions.length === 0 ? (
+          recentTransactions.length === 0 ? (
             <div className="bg-bg-card border border-border rounded-3xl flex flex-col items-center py-12 gap-3 text-center px-6">
               <span className="text-4xl">{viewMode === "shared" ? "🛍️" : "💳"}</span>
               <p className="text-text-primary font-semibold">
                 {viewMode === "shared"
                   ? "Nenhuma despesa ainda"
-                  : "Nenhuma despesa pessoal lançada"}
+                  : isViewingMyOwnInvoice
+                  ? "Nenhuma despesa pessoal lançada"
+                  : `Nenhuma despesa na fatura de ${invoiceOwnerName}`}
               </p>
               <p className="text-text-muted text-sm max-w-xs">
                 {viewMode === "shared"
                   ? "Adicione a primeira compra do mês."
-                  : "Suas compras pessoais ou no cartão de crédito aparecerão aqui."}
+                  : isViewingMyOwnInvoice
+                  ? "Suas compras pessoais ou no cartão de crédito aparecerão aqui."
+                  : `As compras e despesas pessoais de ${invoiceOwnerName} aparecerão aqui.`}
               </p>
               {viewMode === "shared" && (
                 <Button size="sm" onClick={() => navigate("/add")} className="mt-2">

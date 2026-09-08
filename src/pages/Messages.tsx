@@ -264,7 +264,7 @@ export const MessagesPage: React.FC = () => {
             </div>
           </div>
           <p className="text-[10px] text-text-muted leading-relaxed mt-3 border-t border-accent-green/15 pt-3">
-            Se esta versão aparecer aqui, este aparelho já carregou a atualização das notificações de Pendentes.
+            Se esta versão aparecer aqui, este aparelho já está com a sincronização automática de Faturas e compras do Apple Pay.
           </p>
         </div>
       </div>
