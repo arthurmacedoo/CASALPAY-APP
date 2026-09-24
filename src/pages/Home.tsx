@@ -331,7 +331,7 @@ export const HomePage: React.FC = () => {
 
       // Mantém o usuário na aba de pendentes com feedback claro
       setPendingToast({
-        message: `⚡ "${t.description || "Compra"}" adicionada à fatura de ${ownerName}!`,
+        message: `"${t.description || "Compra"}" adicionada à fatura de ${ownerName}!`,
         type: "success",
       });
       setTimeout(() => setPendingToast(null), 3500);
@@ -774,16 +774,18 @@ export const HomePage: React.FC = () => {
 
       {/* Toast flutuante de confirmação de despesa pendente */}
       {pendingToast && (
-        <div
-          role="status"
-          className={`fixed bottom-24 left-1/2 -translate-x-1/2 z-[150] max-w-[90vw] px-4 py-2.5 rounded-2xl shadow-2xl backdrop-blur-md flex items-center gap-2.5 text-xs font-semibold animate-fade-in-up border ${
-            pendingToast.type === "success"
-              ? "bg-bg-elevated/95 text-accent-green border-accent-green/40 shadow-accent-green/10"
-              : "bg-bg-elevated/95 text-accent-red border-accent-red/40 shadow-accent-red/10"
-          }`}
-        >
-          <span className="text-sm shrink-0">{pendingToast.type === "success" ? "⚡" : "⚠️"}</span>
-          <span className="truncate">{pendingToast.message}</span>
+        <div className="fixed bottom-24 left-0 right-0 z-[150] flex justify-center pointer-events-none px-4">
+          <div
+            role="status"
+            className={`pointer-events-auto max-w-[90vw] sm:max-w-sm px-4 py-2.5 rounded-full shadow-2xl backdrop-blur-xl flex items-center gap-2.5 text-xs font-semibold animate-fade-in-up border ${
+              pendingToast.type === "success"
+                ? "bg-bg-elevated/95 text-accent-green border-accent-green/40 shadow-accent-green/10"
+                : "bg-bg-elevated/95 text-accent-red border-accent-red/40 shadow-accent-red/10"
+            }`}
+          >
+            <span className="text-sm shrink-0">{pendingToast.type === "success" ? "⚡" : "⚠️"}</span>
+            <span className="truncate">{pendingToast.message}</span>
+          </div>
         </div>
       )}
     </main>

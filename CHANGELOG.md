@@ -4,6 +4,14 @@ Todas as alterações notáveis, correções e novos recursos deste projeto ser�
 
 ---
 
+## [1.2.2] - 2026-09-24
+### 🎨 Centralização Toast & Correções UI
+- **🐛 Correção de Alinhamento do Toast**: O aviso flutuante de confirmação da fatura não é mais empurrado para a lateral da tela. Agora ele utiliza um container flexível de largura total (`left-0 right-0 flex justify-center`) que elimina colisões de CSS transform, garantindo alinhamento perfeitamente centralizado em qualquer dispositivo (iPhone 13, iPhone 15 Pro Max ou simulador Desktop).
+- **✨ Ajuste Estético e de Texto**: Removida duplicidade do ícone de raio (`⚡ ⚡`) no texto da mensagem, adotando formato dinâmico tipo pílula com bordas arredondadas e sombra suave.
+- **🏷️ Atualização do Patch SemVer**: Versão incrementada para `v1.2.2` com sincronização dos arquivos de metadados e exibição no rodapé da Home e Configurações.
+
+---
+
 ## [1.2.1] - 2026-09-24
 ### ⚡ Hotfix Fatura Pendente & Apple Pay
 - **🐛 Correção do Botão Confirmar Fatura**: Ao clicar em "⚡ Confirmar Fatura" diretamente na aba de Pendentes, a ação não redireciona mais para a fatura. O usuário permanece na aba de Pendentes para continuar revisando os demais itens.
