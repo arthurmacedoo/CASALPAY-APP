@@ -34,7 +34,5 @@ A gestão financeira é um dos maiores desafios para casais. O DualPay resolve i
 
 ---
 
----
-
 *(Este software é mantido com os mais altos padrões de código para servir como base de uma futura startup financeira focada em relacionamentos).*
 
