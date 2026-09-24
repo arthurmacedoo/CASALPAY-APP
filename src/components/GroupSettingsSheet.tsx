@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useGroupContext } from "../contexts/GroupContext";
 import { useAuthContext } from "../contexts/AuthContext";
+import { APP_VERSION, APP_BUILD, APP_RELEASE_NAME, APP_RELEASE_DATE } from "../constants/version";
 import toast from "react-hot-toast";
 
 interface GroupSettingsSheetProps {
@@ -163,6 +164,17 @@ export const GroupSettingsSheet: React.FC<GroupSettingsSheetProps> = ({ isOpen, 
               {deleting ? 'Apagando...' : 'Apagar Grupo Definitivamente'}
             </button>
           )}
+
+          {/* Informações da Versão Ativa */}
+          <div className="text-center pt-4 pb-2 border-t border-border/40 mt-4">
+            <p className="text-xs text-text-muted font-medium flex items-center justify-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent-green inline-block animate-pulse" />
+              CasalPay v{APP_VERSION} ({APP_BUILD})
+            </p>
+            <p className="text-[11px] text-text-muted/70 mt-1">
+              {APP_RELEASE_NAME} · {APP_RELEASE_DATE}
+            </p>
+          </div>
         </section>
       </div>
     </div>,

@@ -16,6 +16,7 @@ import { GroupSettingsSheet } from "../components/GroupSettingsSheet";
 import { Button } from "../components/ui/Button";
 import type { Transaction } from "../types";
 import { PARTNER_NAME, OWNER_NAME } from "../constants/couple";
+import { APP_VERSION, APP_RELEASE_NAME } from "../constants/version";
 import { useGroupContext } from "../contexts/GroupContext";
 
 import {
@@ -759,6 +760,14 @@ export const HomePage: React.FC = () => {
         )}
 
         {group?.id === COUPLE_ID && <AnniversaryCountdown />}
+
+        {/* Badge discreto da versão ativa para conferência no celular */}
+        <div className="flex justify-center pt-2 pb-6">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-bg-elevated/80 border border-border/60 text-[11px] text-text-muted font-medium select-none shadow-sm">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent-green inline-block animate-pulse" />
+            v{APP_VERSION} · {APP_RELEASE_NAME}
+          </span>
+        </div>
       </div>
       
       <GroupSettingsSheet isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
