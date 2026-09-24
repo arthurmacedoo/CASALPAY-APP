@@ -9,6 +9,7 @@ import type {
   ExpenseTransaction,
   SettlementTransaction,
 } from "../types";
+import { sanitizeDateString } from "./formatters";
 
 // ─── Runtime Mapping (Opção B) ────────────────────────────────────────────────
 //
@@ -424,7 +425,8 @@ export function parseToCents(value: string): number | null {
 }
 
 export function getMonthKey(date: string): string {
-  return date.slice(0, 7);
+  const safeDate = sanitizeDateString(date);
+  return safeDate.slice(0, 7);
 }
 
 // ─── Helpers de UI (TransactionItem) ──────────────────────────────────────────

@@ -24,10 +24,49 @@ export function formatBRLRaw(cents: number): string {
 }
 
 /**
+ * Sanitiza uma data garantindo o formato "YYYY-MM-DD" com ano, mês (01-12) e dia (01-31) válidos.
+ * Se a data for inválida ou o mês estiver corrompido (ex: minutos gravados por atalhos iOS como 2026-36-23),
+ * substitui pelo mês atual preservando o dia e ano válidos, ou pela data de hoje.
+ */
+export function sanitizeDateString(dateStr?: unknown): string {
+  if (!dateStr || typeof dateStr !== "string") return getTodayDateString();
+  const parts = dateStr.trim().split("-");
+  if (parts.length !== 3) return getTodayDateString();
+  const year = Number(parts[0]);
+  const month = Number(parts[1]);
+  const day = Number(parts[2]);
+
+  if (
+    isNaN(year) || isNaN(month) || isNaN(day) ||
+    year < 2020 || year > 2050 ||
+    month < 1 || month > 12 ||
+    day < 1 || day > 31
+  ) {
+    const now = new Date();
+    const safeYear = year >= 2020 && year <= 2050 ? year : now.getFullYear();
+    const safeMonth = String(now.getMonth() + 1).padStart(2, "0");
+    const safeDay = day >= 1 && day <= 31 ? String(day).padStart(2, "0") : String(now.getDate()).padStart(2, "0");
+    return `${safeYear}-${safeMonth}-${safeDay}`;
+  }
+
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/**
  * Formata "YYYY-MM-DD" para "30/05/2026"
  */
 export function formatDateBR(dateStr: string): string {
-  const [year, month, day] = dateStr.split("-");
+  if (!dateStr || typeof dateStr !== "string") return "";
+  const parts = dateStr.split("-");
+  if (parts.length !== 3) return dateStr;
+  const [year, month, day] = parts;
+  const m = Number(month);
+  const d = Number(day);
+  if (isNaN(m) || isNaN(d) || m < 1 || m > 12) {
+    const currentMonth = String(new Date().getMonth() + 1).padStart(2, "0");
+    const safeDay = d >= 1 && d <= 31 ? String(d).padStart(2, "0") : String(new Date().getDate()).padStart(2, "0");
+    return `${safeDay}/${currentMonth}/${year}`;
+  }
   return `${day}/${month}/${year}`;
 }
 

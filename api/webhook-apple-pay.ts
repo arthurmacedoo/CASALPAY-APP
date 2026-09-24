@@ -11,9 +11,10 @@ initFirebaseAdmin();
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 
-/** Extrai "YYYY-MM" a partir de "YYYY-MM-DD". */
+/** Extrai "YYYY-MM" a partir de "YYYY-MM-DD", garantindo formato válido. */
 function getMonthKey(date: string): string {
-  return date.slice(0, 7);
+  const safe = sanitizeWebhookDate(date);
+  return safe.slice(0, 7);
 }
 
 /**
@@ -66,15 +67,39 @@ function toCents(value: unknown): number | null {
   return Math.round(num * 100);
 }
 
-/** Valida formato YYYY-MM-DD. */
+/** Valida formato YYYY-MM-DD com ano, mês (01-12) e dia (01-31). */
 function isValidDate(date: unknown): date is string {
   if (typeof date !== "string") return false;
-  return /^\d{4}-\d{2}-\d{2}$/.test(date);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const [year, month, day] = date.split("-").map(Number);
+  if (isNaN(year) || isNaN(month) || isNaN(day)) return false;
+  if (year < 2020 || year > 2050) return false;
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+  return true;
 }
 
 /** Data de hoje no formato YYYY-MM-DD usando o relógio do servidor. */
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Sanitiza a data para YYYY-MM-DD garantindo mês válido.
+ * Se o atalho do iOS enviar minutos no lugar do mês (ex: 2026-36-23),
+ * preserva o dia e o ano e usa o mês atual.
+ */
+function sanitizeWebhookDate(date: unknown): string {
+  if (isValidDate(date)) return date;
+  const now = new Date();
+  if (typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    const [y, , d] = date.split("-").map(Number);
+    const safeYear = y >= 2020 && y <= 2050 ? y : now.getFullYear();
+    const safeMonth = String(now.getMonth() + 1).padStart(2, "0");
+    const safeDay = d >= 1 && d <= 31 ? String(d).padStart(2, "0") : String(now.getDate()).padStart(2, "0");
+    return `${safeYear}-${safeMonth}-${safeDay}`;
+  }
+  return todayISO();
 }
 
 // ── Resultado da validação ────────────────────────────────────────────────────
@@ -91,7 +116,7 @@ type ValidationResult = {
  * Validação com higienização inteligente:
  * - Amount: limpa símbolos antes de converter
  * - Description: usa "Compra Apple Pay" se ausente (NÃO falha)
- * - Date: usa hoje como fallback se inválida
+ * - Date: sanitiza mês/dia inválidos preservando dados úteis, ou usa hoje
  * - Falha APENAS se o amount for irrecuperável (retorna errorReason)
  */
 function validateBody(body: Record<string, unknown>): ValidationResult {
@@ -103,7 +128,7 @@ function validateBody(body: Record<string, unknown>): ValidationResult {
     return {
       amountCents: 0,
       description: "",
-      finalDate: isValidDate(date) ? date : todayISO(),
+      finalDate: sanitizeWebhookDate(date),
       errorReason: `Valor irrecuperável: "${String(amount ?? "ausente")}"`,
     };
   }
@@ -115,8 +140,8 @@ function validateBody(body: Record<string, unknown>): ValidationResult {
       ? "Compra Apple Pay"
       : rawDesc;
 
-  // 3. Date: usa hoje se inválida
-  const finalDate = isValidDate(date) ? date : todayISO();
+  // 3. Date: sanitiza garantindo data e mês válidos
+  const finalDate = sanitizeWebhookDate(date);
 
   return { amountCents, description: finalDescription, finalDate };
 }

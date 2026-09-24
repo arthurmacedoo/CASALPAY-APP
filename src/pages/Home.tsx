@@ -2,12 +2,12 @@ import React, { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useTransactions } from "../hooks/useTransactions";
-import { deleteDoc, setDoc, addDoc, serverTimestamp } from "firebase/firestore";
-import { transactionDocRef, transactionsRef, COUPLE_ID, userDocRef } from "../lib/firebase";
+import { deleteDoc, setDoc, addDoc, serverTimestamp, getDocs, query, where, writeBatch } from "firebase/firestore";
+import { db, transactionDocRef, transactionsRef, COUPLE_ID, userDocRef } from "../lib/firebase";
 import { useAuthContext } from "../contexts/AuthContext";
 import { usePendingTransactions } from "../hooks/usePendingTransactions";
-import { calculateBalance, generatePixSummary } from "../lib/calculations";
-import { getCurrentMonthKey, formatMonthLabel, formatBRL, formatDateBR, getTodayDateString } from "../lib/formatters";
+import { calculateBalance, generatePixSummary, getMonthKey } from "../lib/calculations";
+import { getCurrentMonthKey, formatMonthLabel, formatBRL, formatDateBR, getTodayDateString, sanitizeDateString } from "../lib/formatters";
 import { BalanceCard } from "../components/BalanceCard";
 import { TransactionItem } from "../components/TransactionItem";
 import { AnniversaryCountdown } from "../components/AnniversaryCountdown";
@@ -166,10 +166,48 @@ export const HomePage: React.FC = () => {
       : "shared";
   });
 
+  const [pendingToast, setPendingToast] = useState<{
+    message: string;
+    type: "success" | "error";
+  } | null>(null);
+
   // Atualiza a sessionStorage sempre que a aba mudar, e escuta o BottomNav
   React.useEffect(() => {
     sessionStorage.setItem("casalpay_viewMode", viewMode);
   }, [viewMode]);
+
+  // Auto-heal: recupera e corrige qualquer despesa confirmada com mês inválido gerado por atalhos anteriores (ex: 2026-36)
+  React.useEffect(() => {
+    if (!group) return;
+    const healOrphanTransactions = async () => {
+      try {
+        const q = query(
+          transactionsRef(group.id),
+          where("monthKey", ">", "2026-12")
+        );
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const batch = writeBatch(db);
+          snap.forEach((docSnap) => {
+            const data = docSnap.data();
+            const safeDate = sanitizeDateString(data.date);
+            const safeMonthKey = getMonthKey(safeDate);
+            batch.update(docSnap.ref, {
+              date: safeDate,
+              monthKey: safeMonthKey,
+              updatedAt: serverTimestamp(),
+            });
+          });
+          await batch.commit();
+          console.log(`[AutoHeal] ${snap.size} transações com mês corrigido.`);
+        }
+      } catch (e) {
+        // Silencioso se não houver registros ou permissão
+        console.warn("[AutoHeal] Verificação:", e);
+      }
+    };
+    healOrphanTransactions();
+  }, [group?.id]);
 
   // Sincroniza membro selecionado da URL ou quando o usuário autentica
   React.useEffect(() => {
@@ -252,9 +290,9 @@ export const HomePage: React.FC = () => {
   };
 
   const handleReviewPending = (t: Transaction) => {
-    // Reutiliza o fluxo de edição do AddExpense — ao salvar, updateTransaction
-    // irá gravar status: 'confirmed' automaticamente.
-    navigate("/add", { state: { transaction: t } });
+    // Reutiliza o fluxo de edição do AddExpense garantindo data higienizada
+    const safeDate = sanitizeDateString(t.date);
+    navigate("/add", { state: { transaction: { ...t, date: safeDate } } });
   };
 
   const handleQuickConfirmPending = async (t: Transaction) => {
@@ -270,13 +308,16 @@ export const HomePage: React.FC = () => {
         user?.uid ??
         (members[0]?.userId ?? "");
 
+      const ownerName = members.find((m) => m.userId === ownerId)?.name?.split(" ")[0] || "você";
+      const safeDate = sanitizeDateString(t.date);
+
       await updateTransaction(
         t,
         {
           type: "expense",
           description: t.description || "Compra Apple Pay",
           amount: (t.amount / 100).toFixed(2).replace(".", ","),
-          date: t.date,
+          date: safeDate,
           paidByUserId: ownerId,
           splitBetweenUserIds: members.map((m) => m.userId),
           splitMode: "personal",
@@ -287,11 +328,19 @@ export const HomePage: React.FC = () => {
         t.amount
       );
 
-      // Direciona a visão da Home para a fatura do membro com a despesa
-      setSelectedInvoiceUserId(ownerId);
-      setViewMode("personal");
-    } catch (err) {
+      // Mantém o usuário na aba de pendentes com feedback claro
+      setPendingToast({
+        message: `⚡ "${t.description || "Compra"}" adicionada à fatura de ${ownerName}!`,
+        type: "success",
+      });
+      setTimeout(() => setPendingToast(null), 3500);
+    } catch (err: any) {
       console.error("Erro ao confirmar despesa pendente:", err);
+      setPendingToast({
+        message: `Erro ao confirmar: ${err?.message || "Tente novamente"}`,
+        type: "error",
+      });
+      setTimeout(() => setPendingToast(null), 4500);
     }
   };
 
@@ -713,6 +762,21 @@ export const HomePage: React.FC = () => {
       </div>
       
       <GroupSettingsSheet isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+
+      {/* Toast flutuante de confirmação de despesa pendente */}
+      {pendingToast && (
+        <div
+          role="status"
+          className={`fixed bottom-24 left-1/2 -translate-x-1/2 z-[150] max-w-[90vw] px-4 py-2.5 rounded-2xl shadow-2xl backdrop-blur-md flex items-center gap-2.5 text-xs font-semibold animate-fade-in-up border ${
+            pendingToast.type === "success"
+              ? "bg-bg-elevated/95 text-accent-green border-accent-green/40 shadow-accent-green/10"
+              : "bg-bg-elevated/95 text-accent-red border-accent-red/40 shadow-accent-red/10"
+          }`}
+        >
+          <span className="text-sm shrink-0">{pendingToast.type === "success" ? "⚡" : "⚠️"}</span>
+          <span className="truncate">{pendingToast.message}</span>
+        </div>
+      )}
     </main>
   );
 };

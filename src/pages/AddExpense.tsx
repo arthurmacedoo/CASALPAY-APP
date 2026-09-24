@@ -8,7 +8,7 @@ import type {
   SettlementFormData,
 } from "../types";
 import { parseToCents, getMonthKey } from "../lib/calculations";
-import { getTodayDateString, getCurrentMonthKey, formatBRL } from "../lib/formatters";
+import { getTodayDateString, getCurrentMonthKey, formatBRL, sanitizeDateString } from "../lib/formatters";
 import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
 import { useGroupContext } from "../contexts/GroupContext";
@@ -95,6 +95,7 @@ export const AddExpensePage: React.FC = () => {
       const isInstallment =
         editTransaction.type === "expense" &&
         (editTransaction.installmentCount ?? 0) > 1;
+      const safeDate = sanitizeDateString(editTransaction.date);
 
       if (editTransaction.type === "expense") {
         const inferredPayer =
@@ -106,7 +107,7 @@ export const AddExpensePage: React.FC = () => {
           type: "expense",
           description: editTransaction.description,
           amount: (displayAmount / 100).toFixed(2).replace(".", ","),
-          date: editTransaction.date,
+          date: safeDate,
           paidByUserId: inferredPayer,
           splitBetweenUserIds: editTransaction.splitBetweenUserIds ?? memberIds,
           splitMode: editTransaction.splitMode ?? "personal",
@@ -125,7 +126,7 @@ export const AddExpensePage: React.FC = () => {
           type: "settlement",
           description: editTransaction.description,
           amount: (displayAmount / 100).toFixed(2).replace(".", ","),
-          date: editTransaction.date,
+          date: safeDate,
           fromUserId: editTransaction.fromUserId ?? defaultPayerUid,
           toUserId: editTransaction.toUserId ?? defaultRecipientUid,
           isPersonalInvoice: editTransaction.visibility === "personal",
