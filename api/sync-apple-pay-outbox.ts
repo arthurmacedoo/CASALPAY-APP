@@ -54,22 +54,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST")   return res.status(405).json({ error: "Method not allowed" });
 
-  // ── Autenticação ──────────────────────────────────────────────────────────
+  // ── Autenticação Estrita via Header HTTP ───────────────────────────────────
   const authHeader     = req.headers.authorization ?? "";
-  const querySecret    = (req.query.secret as string) || (req.query.token as string) || "";
   const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 
   if (!WEBHOOK_SECRET) {
-    console.error("[sync] WEBHOOK_SECRET não configurado");
+    console.error("[sync] WEBHOOK_SECRET não configurado nas variáveis de ambiente");
     return res.status(500).json({ error: "Server config error" });
   }
 
   const isAuthHeaderValid = authHeader === `Bearer ${WEBHOOK_SECRET}`;
-  const isQuerySecretValid = querySecret === WEBHOOK_SECRET;
 
-  if (!isAuthHeaderValid && !isQuerySecretValid) {
-    console.warn("[sync] Token/Secret inválido");
-    return res.status(401).json({ error: "Unauthorized" });
+  if (!isAuthHeaderValid) {
+    console.warn("[sync] Acesso não autorizado: Header Authorization inválido ou ausente");
+    return res.status(401).json({ error: "Unauthorized: Missing or invalid Authorization header" });
   }
 
   // ── Validação do body ─────────────────────────────────────────────────────

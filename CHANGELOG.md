@@ -4,6 +4,25 @@ Todas as alterações notáveis, correções e novos recursos deste projeto ser�
 
 ---
 
+## [1.5.1] - 2026-09-25
+### 🔒 Concorrência Atômica, Sincronização Offline e Blindagem de Segurança
+- **⚛️ Mutações Atômicas em Metas (`runTransaction`)**:
+  - Refatoração das operações `addContribution` e `withdrawGoal` para execução atômica via `runTransaction` do Firestore.
+  - Elimina risco de sobreposição de dados (*lost updates*) caso Arthur e Zara realizem aportes ou resgates simultaneamente em seus aparelhos.
+  - O cálculo do saldo acumulado (`currentAmount`) e o rateio por membro (`contributionsByMember`) passam a ser resolvidos diretamente no banco com garantia ACID, mantendo fallback resiliente em `LocalStorage`.
+- **📶 Tratamento de Snapshot Offline com Metadata**:
+  - Inclusão de `includeMetadataChanges: true` e verificação de `snapshot.metadata.fromCache` e `snapshot.metadata.hasPendingWrites` nos listeners de metas, aportes e resgates.
+  - Protege contra a sobrescrita acidental de alterações locais quando o aparelho transita entre modos offline e online.
+- **🛡️ Blindagem Estrita do Webhook Apple Pay**:
+  - Remoção de autenticação via query string (`req.query.secret` e `req.query.token`) no endpoint `/api/webhook-apple-pay.ts` e `/api/sync-apple-pay-outbox.ts`.
+  - Exigência mandatória do cabeçalho HTTP seguro `Authorization: Bearer <WEBHOOK_SECRET>`, eliminando vazamento de credenciais em logs de acesso e histórico de URLs.
+  - Preservação do fallback de grupo exclusivo configurado para o casal (`process.env.VITE_COUPLE_ID || "arthur-namorada-2026"`).
+- **🔐 Proteção Rigorosa de Grupos nas Regras do Firestore**:
+  - Atualização de `allow get` em `match /groups/{groupId}` para validar explicitamente `request.auth.uid in resource.data.memberIds`.
+  - Impede que usuários autenticados externos consultem grupos dos quais não são membros, preservando a cascata para todas as subcoleções.
+
+---
+
 ## [1.5.0] - 2026-09-25
 ### 🎯 Metas & Investimentos do Casal, Busca na Fatura e Experiência Mobile
 - **🎯 Nova Aba Metas & Investimentos**:

@@ -1,5 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { onSnapshot, setDoc, doc, deleteDoc, collection } from "firebase/firestore";
+import {
+  onSnapshot,
+  setDoc,
+  doc,
+  deleteDoc,
+  collection,
+  runTransaction,
+} from "firebase/firestore";
 import { useGroupContext } from "../contexts/GroupContext";
 import { getCurrentMonthKey, getTodayDateString } from "../lib/formatters";
 import { db, goalsRef, goalDocRef } from "../lib/firebase";
@@ -76,7 +83,7 @@ export function useGoals() {
     [groupId]
   );
 
-  // Carregar dados e escutar em tempo real (Firestore com fallback de Cache Local)
+  // Carregar dados e escutar em tempo real (Firestore com controle de Cache Offline e Metadata)
   useEffect(() => {
     if (!group) {
       setLoading(false);
@@ -130,6 +137,7 @@ export function useGoals() {
     }
 
     // 3. Sincronização em tempo real com Firestore (Arthur e Zara compartilham as mesmas metas)
+    // Monitora metadata de cache para evitar sobrescrever dados locais com snapshots desatualizados
     let unsubGoals: (() => void) | undefined;
     let unsubContribs: (() => void) | undefined;
     let unsubWithdrawals: (() => void) | undefined;
@@ -138,7 +146,11 @@ export function useGoals() {
       const gRef = goalsRef(groupId);
       unsubGoals = onSnapshot(
         gRef,
+        { includeMetadataChanges: true },
         (snapshot) => {
+          const isFromCache = snapshot.metadata.fromCache;
+          const hasPendingWrites = snapshot.metadata.hasPendingWrites;
+
           const remoteGoals: Goal[] = [];
           snapshot.forEach((docSnap) => {
             const data = docSnap.data() as Goal;
@@ -146,8 +158,12 @@ export function useGoals() {
               remoteGoals.push({ ...data, id: docSnap.id });
             }
           });
-          setGoals(remoteGoals);
-          localStorage.setItem(`${GOALS_STORAGE_KEY_PREFIX}${groupId}`, JSON.stringify(remoteGoals));
+
+          // Atualiza caso os dados venham do servidor, tenham pendências ativas locais ou a lista remota exista
+          if (!isFromCache || hasPendingWrites || remoteGoals.length > 0) {
+            setGoals(remoteGoals);
+            localStorage.setItem(`${GOALS_STORAGE_KEY_PREFIX}${groupId}`, JSON.stringify(remoteGoals));
+          }
           setLoading(false);
         },
         (err) => {
@@ -159,7 +175,11 @@ export function useGoals() {
       const cRef = collection(db, "groups", groupId, "goal_contributions");
       unsubContribs = onSnapshot(
         cRef,
+        { includeMetadataChanges: true },
         (snapshot) => {
+          const isFromCache = snapshot.metadata.fromCache;
+          const hasPendingWrites = snapshot.metadata.hasPendingWrites;
+
           const remoteContribs: GoalContribution[] = [];
           snapshot.forEach((docSnap) => {
             const data = docSnap.data() as GoalContribution;
@@ -167,8 +187,11 @@ export function useGoals() {
               remoteContribs.push({ ...data, id: docSnap.id });
             }
           });
-          setContributions(remoteContribs);
-          localStorage.setItem(`${CONTRIBS_STORAGE_KEY_PREFIX}${groupId}`, JSON.stringify(remoteContribs));
+
+          if (!isFromCache || hasPendingWrites || remoteContribs.length > 0) {
+            setContributions(remoteContribs);
+            localStorage.setItem(`${CONTRIBS_STORAGE_KEY_PREFIX}${groupId}`, JSON.stringify(remoteContribs));
+          }
         },
         (err) => {
           console.warn("Firestore contribuições em modo local:", err.message);
@@ -178,7 +201,11 @@ export function useGoals() {
       const wRef = collection(db, "groups", groupId, "goal_withdrawals");
       unsubWithdrawals = onSnapshot(
         wRef,
+        { includeMetadataChanges: true },
         (snapshot) => {
+          const isFromCache = snapshot.metadata.fromCache;
+          const hasPendingWrites = snapshot.metadata.hasPendingWrites;
+
           const remoteWithdrawals: GoalWithdrawal[] = [];
           snapshot.forEach((docSnap) => {
             const data = docSnap.data() as GoalWithdrawal;
@@ -186,8 +213,11 @@ export function useGoals() {
               remoteWithdrawals.push({ ...data, id: docSnap.id });
             }
           });
-          setWithdrawals(remoteWithdrawals);
-          localStorage.setItem(`${WITHDRAWALS_STORAGE_KEY_PREFIX}${groupId}`, JSON.stringify(remoteWithdrawals));
+
+          if (!isFromCache || hasPendingWrites || remoteWithdrawals.length > 0) {
+            setWithdrawals(remoteWithdrawals);
+            localStorage.setItem(`${WITHDRAWALS_STORAGE_KEY_PREFIX}${groupId}`, JSON.stringify(remoteWithdrawals));
+          }
         },
         (err) => {
           console.warn("Firestore resgates em modo local:", err.message);
@@ -332,6 +362,7 @@ export function useGoals() {
     [groupId, goals, contributions, persistLocal, arthurUid, zaraUid]
   );
 
+  // MUTAÇÃO ATÔMICA: addContribution utilizando runTransaction
   const addContribution = useCallback(
     async (
       goalId: string,
@@ -339,73 +370,99 @@ export function useGoals() {
       contributorType: ContributorType,
       note?: string
     ) => {
-      const targetGoal = goals.find((g) => g.id === goalId);
-      if (!targetGoal) throw new Error("Meta não encontrada");
-
-      const memberAmounts: Record<string, number> = {};
-      if (contributorType === "arthur") {
-        memberAmounts[arthurUid] = amount;
-        memberAmounts[zaraUid] = 0;
-      } else if (contributorType === "zara") {
-        memberAmounts[arthurUid] = 0;
-        memberAmounts[zaraUid] = amount;
-      } else {
-        const half = Math.floor(amount / 2);
-        memberAmounts[arthurUid] = half + (amount % 2);
-        memberAmounts[zaraUid] = half;
-      }
-
-      const newCurrentAmount = targetGoal.currentAmount + amount;
-      const isCompleted = newCurrentAmount >= targetGoal.targetAmount;
-
-      const updatedContributionsByMember = { ...(targetGoal.contributionsByMember || {}) };
-      for (const [mId, mAmount] of Object.entries(memberAmounts)) {
-        updatedContributionsByMember[mId] = (updatedContributionsByMember[mId] || 0) + mAmount;
-      }
-
-      const updatedGoal: Goal = {
-        ...targetGoal,
-        currentAmount: newCurrentAmount,
-        status: isCompleted ? "completed" : "in_progress",
-        contributionsByMember: updatedContributionsByMember,
-        updatedAt: new Date().toISOString(),
-      };
-
       const today = getTodayDateString();
-      const newContrib: GoalContribution = {
-        id: `contrib_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-        goalId,
-        amount,
-        contributorType,
-        contributedByUserId: contributorType === "zara" ? zaraUid : arthurUid,
-        memberAmounts,
-        date: today,
-        monthKey: today.slice(0, 7),
-        note,
-        createdAt: new Date().toISOString(),
+      const contribId = `contrib_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+      const contribDocRef = doc(db, "groups", groupId, "goal_contributions", contribId);
+      const targetGoalDocRef = goalDocRef(groupId, goalId);
+
+      const computeContribution = (
+        currentGoalData: Goal
+      ): { updatedGoal: Goal; newContrib: GoalContribution } => {
+        const memberAmounts: Record<string, number> = {};
+        if (contributorType === "arthur") {
+          memberAmounts[arthurUid] = amount;
+          memberAmounts[zaraUid] = 0;
+        } else if (contributorType === "zara") {
+          memberAmounts[arthurUid] = 0;
+          memberAmounts[zaraUid] = amount;
+        } else {
+          const half = Math.floor(amount / 2);
+          memberAmounts[arthurUid] = half + (amount % 2);
+          memberAmounts[zaraUid] = half;
+        }
+
+        const newCurrentAmount = currentGoalData.currentAmount + amount;
+        const isCompleted = newCurrentAmount >= currentGoalData.targetAmount;
+
+        const updatedContributionsByMember = { ...(currentGoalData.contributionsByMember || {}) };
+        for (const [mId, mAmount] of Object.entries(memberAmounts)) {
+          updatedContributionsByMember[mId] = (updatedContributionsByMember[mId] || 0) + mAmount;
+        }
+
+        const updatedGoal: Goal = {
+          ...currentGoalData,
+          currentAmount: newCurrentAmount,
+          status: isCompleted ? "completed" : "in_progress",
+          contributionsByMember: updatedContributionsByMember,
+          updatedAt: new Date().toISOString(),
+        };
+
+        const newContrib: GoalContribution = {
+          id: contribId,
+          goalId,
+          amount,
+          contributorType,
+          contributedByUserId: contributorType === "zara" ? zaraUid : arthurUid,
+          memberAmounts,
+          date: today,
+          monthKey: today.slice(0, 7),
+          note,
+          createdAt: new Date().toISOString(),
+        };
+
+        return { updatedGoal, newContrib };
       };
 
-      const nextGoals = goals.map((g) => (g.id === goalId ? updatedGoal : g));
-      const nextContribs = [newContrib, ...contributions];
-
-      persistLocal(nextGoals, nextContribs);
-
-      // Persistência no Firestore
       try {
-        await setDoc(
-          doc(db, "groups", groupId, "goal_contributions", newContrib.id),
-          newContrib
-        );
-        await setDoc(goalDocRef(groupId, goalId), updatedGoal);
-      } catch (err) {
-        console.warn("Contribuição salva em cache local (offline):", err);
-      }
+        // 1. Transação Atômica no Firestore para prevenir lost updates concorrentes
+        const result = await runTransaction(db, async (txn) => {
+          const goalSnap = await txn.get(targetGoalDocRef);
+          if (!goalSnap.exists()) {
+            throw new Error("Meta não encontrada no servidor");
+          }
+          const currentGoalData = { id: goalSnap.id, ...goalSnap.data() } as Goal;
+          const { updatedGoal, newContrib } = computeContribution(currentGoalData);
 
-      return { updatedGoal, newContrib };
+          txn.set(targetGoalDocRef, updatedGoal);
+          txn.set(contribDocRef, newContrib);
+
+          return { updatedGoal, newContrib };
+        });
+
+        // 2. Atualiza estado e cache local com o resultado atômico
+        const nextGoals = goals.map((g) => (g.id === goalId ? result.updatedGoal : g));
+        const nextContribs = [result.newContrib, ...contributions];
+        persistLocal(nextGoals, nextContribs);
+
+        return result;
+      } catch (err) {
+        console.warn("Transação remota de aporte offline/falhou. Aplicando fallback local:", err);
+
+        const targetGoal = goals.find((g) => g.id === goalId);
+        if (!targetGoal) throw new Error("Meta não encontrada");
+
+        const { updatedGoal, newContrib } = computeContribution(targetGoal);
+        const nextGoals = goals.map((g) => (g.id === goalId ? updatedGoal : g));
+        const nextContribs = [newContrib, ...contributions];
+        persistLocal(nextGoals, nextContribs);
+
+        return { updatedGoal, newContrib };
+      }
     },
     [groupId, goals, contributions, persistLocal, arthurUid, zaraUid]
   );
 
+  // MUTAÇÃO ATÔMICA: withdrawGoal utilizando runTransaction
   const withdrawGoal = useCallback(
     async (
       goalId: string,
@@ -413,75 +470,101 @@ export function useGoals() {
       reason: string,
       contributorType: ContributorType = "split"
     ) => {
-      const targetGoal = goals.find((g) => g.id === goalId);
-      if (!targetGoal) throw new Error("Meta não encontrada");
-      if (amount <= 0) throw new Error("Valor inválido");
-      if (amount > targetGoal.currentAmount) throw new Error("Saldo insuficiente na meta");
-
-      const newAmount = targetGoal.currentAmount - amount;
-
-      // Abate as contribuições acumuladas dos membros garantindo consistência patrimonial
-      const currentMemberContribs = { ...(targetGoal.contributionsByMember || {}) };
-      const arthurBal = currentMemberContribs[arthurUid] || 0;
-      const zaraBal = currentMemberContribs[zaraUid] || 0;
-
-      if (contributorType === "arthur") {
-        if (amount > arthurBal) {
-          throw new Error("Arthur não possui saldo individual suficiente nesta meta para este resgate.");
-        }
-        currentMemberContribs[arthurUid] = arthurBal - amount;
-      } else if (contributorType === "zara") {
-        if (amount > zaraBal) {
-          throw new Error("Zara não possui saldo individual suficiente nesta meta para este resgate.");
-        }
-        currentMemberContribs[zaraUid] = zaraBal - amount;
-      } else {
-        // Resgate conjunto (split 50/50 ou proporcional se saldo for assimétrico)
-        const totalCurrent = targetGoal.currentAmount;
-        const arthurRatio = totalCurrent > 0 ? arthurBal / totalCurrent : 0.5;
-        const arthurDeduct = Math.min(arthurBal, Math.round(amount * arthurRatio));
-        const zaraDeduct = amount - arthurDeduct;
-        currentMemberContribs[arthurUid] = Math.max(0, arthurBal - arthurDeduct);
-        currentMemberContribs[zaraUid] = Math.max(0, zaraBal - zaraDeduct);
-      }
-
-      const updatedGoal: Goal = {
-        ...targetGoal,
-        currentAmount: newAmount,
-        contributionsByMember: currentMemberContribs,
-        status: newAmount >= targetGoal.targetAmount ? "completed" : "in_progress",
-        updatedAt: new Date().toISOString(),
-      };
-
       const today = getTodayDateString();
-      const newWithdrawal: GoalWithdrawal = {
-        id: `with_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        goalId,
-        amount,
-        reason: reason.trim() || "Resgate da meta",
-        contributorType,
-        withdrawnByUserId: contributorType === "zara" ? zaraUid : arthurUid,
-        date: today,
-        createdAt: new Date().toISOString(),
+      const withdrawalId = `with_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      const withdrawalDocRef = doc(db, "groups", groupId, "goal_withdrawals", withdrawalId);
+      const targetGoalDocRef = goalDocRef(groupId, goalId);
+
+      const computeWithdrawal = (
+        targetGoal: Goal
+      ): { updatedGoal: Goal; newWithdrawal: GoalWithdrawal } => {
+        if (amount <= 0) throw new Error("Valor inválido");
+        if (amount > targetGoal.currentAmount) throw new Error("Saldo insuficiente na meta");
+
+        const newAmount = targetGoal.currentAmount - amount;
+
+        // Abate as contribuições acumuladas dos membros garantindo consistência patrimonial
+        const currentMemberContribs = { ...(targetGoal.contributionsByMember || {}) };
+        const arthurBal = currentMemberContribs[arthurUid] || 0;
+        const zaraBal = currentMemberContribs[zaraUid] || 0;
+
+        if (contributorType === "arthur") {
+          if (amount > arthurBal) {
+            throw new Error("Arthur não possui saldo individual suficiente nesta meta para este resgate.");
+          }
+          currentMemberContribs[arthurUid] = arthurBal - amount;
+        } else if (contributorType === "zara") {
+          if (amount > zaraBal) {
+            throw new Error("Zara não possui saldo individual suficiente nesta meta para este resgate.");
+          }
+          currentMemberContribs[zaraUid] = zaraBal - amount;
+        } else {
+          // Resgate conjunto (split 50/50 ou proporcional se saldo for assimétrico)
+          const totalCurrent = targetGoal.currentAmount;
+          const arthurRatio = totalCurrent > 0 ? arthurBal / totalCurrent : 0.5;
+          const arthurDeduct = Math.min(arthurBal, Math.round(amount * arthurRatio));
+          const zaraDeduct = amount - arthurDeduct;
+          currentMemberContribs[arthurUid] = Math.max(0, arthurBal - arthurDeduct);
+          currentMemberContribs[zaraUid] = Math.max(0, zaraBal - zaraDeduct);
+        }
+
+        const updatedGoal: Goal = {
+          ...targetGoal,
+          currentAmount: newAmount,
+          contributionsByMember: currentMemberContribs,
+          status: newAmount >= targetGoal.targetAmount ? "completed" : "in_progress",
+          updatedAt: new Date().toISOString(),
+        };
+
+        const newWithdrawal: GoalWithdrawal = {
+          id: withdrawalId,
+          goalId,
+          amount,
+          reason: reason.trim() || "Resgate da meta",
+          contributorType,
+          withdrawnByUserId: contributorType === "zara" ? zaraUid : arthurUid,
+          date: today,
+          createdAt: new Date().toISOString(),
+        };
+
+        return { updatedGoal, newWithdrawal };
       };
 
-      const nextGoals = goals.map((g) => (g.id === goalId ? updatedGoal : g));
-      const nextWithdrawals = [newWithdrawal, ...withdrawals];
-
-      persistLocal(nextGoals, contributions, nextWithdrawals);
-
-      // Persistência no Firestore
       try {
-        await setDoc(
-          doc(db, "groups", groupId, "goal_withdrawals", newWithdrawal.id),
-          newWithdrawal
-        );
-        await setDoc(goalDocRef(groupId, goalId), updatedGoal);
-      } catch (err) {
-        console.warn("Resgate salvo em cache local (offline):", err);
-      }
+        // 1. Transação Atômica no Firestore
+        const result = await runTransaction(db, async (txn) => {
+          const goalSnap = await txn.get(targetGoalDocRef);
+          if (!goalSnap.exists()) {
+            throw new Error("Meta não encontrada no servidor");
+          }
+          const currentGoalData = { id: goalSnap.id, ...goalSnap.data() } as Goal;
+          const { updatedGoal, newWithdrawal } = computeWithdrawal(currentGoalData);
 
-      return { updatedGoal, newWithdrawal };
+          txn.set(targetGoalDocRef, updatedGoal);
+          txn.set(withdrawalDocRef, newWithdrawal);
+
+          return { updatedGoal, newWithdrawal };
+        });
+
+        // 2. Atualiza estado e cache local com o resultado atômico
+        const nextGoals = goals.map((g) => (g.id === goalId ? result.updatedGoal : g));
+        const nextWithdrawals = [result.newWithdrawal, ...withdrawals];
+        persistLocal(nextGoals, contributions, nextWithdrawals);
+
+        return result;
+      } catch (err) {
+        console.warn("Transação remota de resgate offline/falhou. Aplicando fallback local:", err);
+
+        const targetGoal = goals.find((g) => g.id === goalId);
+        if (!targetGoal) throw new Error("Meta não encontrada");
+
+        const { updatedGoal, newWithdrawal } = computeWithdrawal(targetGoal);
+        const nextGoals = goals.map((g) => (g.id === goalId ? updatedGoal : g));
+        const nextWithdrawals = [newWithdrawal, ...withdrawals];
+        persistLocal(nextGoals, contributions, nextWithdrawals);
+
+        return { updatedGoal, newWithdrawal };
+      }
     },
     [groupId, goals, contributions, withdrawals, persistLocal, arthurUid, zaraUid]
   );
