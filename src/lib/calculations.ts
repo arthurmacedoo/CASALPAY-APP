@@ -418,7 +418,16 @@ function formatCentsToBRL(cents: number): string {
 }
 
 export function parseToCents(value: string): number | null {
-  const normalized = value.trim().replace(",", ".");
+  if (!value) return null;
+  // Remove "R$", espaços normais e espaços não-quebráveis (\u00A0)
+  const cleaned = value.replace(/R\$\s?|\s|\u00A0/g, "").trim();
+  if (!cleaned) return null;
+
+  let normalized = cleaned;
+  if (cleaned.includes(",")) {
+    // Padrão brasileiro: 1.500,50 -> remove pontos de milhar e troca vírgula por ponto
+    normalized = cleaned.replace(/\./g, "").replace(",", ".");
+  }
   const parsed = parseFloat(normalized);
   if (isNaN(parsed) || parsed <= 0) return null;
   return Math.round(parsed * 100);

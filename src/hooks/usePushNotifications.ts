@@ -41,8 +41,8 @@ export function usePushNotifications(user: User | null, activeGroupId: string | 
       return;
     }
     if (!VAPID_KEY) {
-      const err = "VITE_FIREBASE_VAPID_KEY não configurado. Adicione nas variáveis de ambiente da Vercel.";
-      console.error("[FCM] ⚠️ " + err);
+      const err = "VITE_FIREBASE_VAPID_KEY não configurado (normal em localhost).";
+      console.warn("[FCM] ℹ️ " + err);
       setPushError(err);
       setPushStatus("error");
       return;

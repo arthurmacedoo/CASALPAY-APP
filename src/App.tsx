@@ -5,6 +5,7 @@ import { BottomNav } from "./components/BottomNav";
 import { HomePage } from "./pages/Home";
 import { AddExpensePage } from "./pages/AddExpense";
 import { HistoryPage } from "./pages/History";
+import { GoalsPage } from "./pages/Goals";
 import { MessagesPage } from "./pages/Messages";
 import { LoginPage } from "./pages/Login";
 import { NotificationProvider } from "./contexts/NotificationContext";
@@ -75,6 +76,7 @@ const AuthenticatedApp: React.FC = () => {
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/add" element={<AddExpensePage />} />
+              <Route path="/goals" element={<GoalsPage />} />
               <Route path="/history" element={<HistoryPage />} />
               <Route path="/messages" element={<MessagesPage />} />
             </Routes>

@@ -24,6 +24,23 @@ export function formatBRLRaw(cents: number): string {
 }
 
 /**
+ * Máscara estilo maquininha de cartão / POS para inputs monetários.
+ * Converte dígitos digitados da direita para a esquerda:
+ * "1" -> "0,01"
+ * "15" -> "0,15"
+ * "150" -> "1,50"
+ * "1500" -> "15,00"
+ * "150000" -> "1.500,00"
+ */
+export function maskCurrencyInput(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return "";
+  const cents = parseInt(digits, 10);
+  if (cents === 0) return "";
+  return formatBRLRaw(cents);
+}
+
+/**
  * Sanitiza uma data garantindo o formato "YYYY-MM-DD" com ano, mês (01-12) e dia (01-31) válidos.
  * Se a data for inválida ou o mês estiver corrompido (ex: minutos gravados por atalhos iOS como 2026-36-23),
  * substitui pelo mês atual preservando o dia e ano válidos, ou pela data de hoje.
@@ -77,6 +94,22 @@ export function formatMonthLabel(monthKey: string): string {
   const [year, month] = monthKey.split("-");
   const date = new Date(Number(year), Number(month) - 1, 1);
   return date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+}
+
+/**
+ * Formata prazo da meta de forma amigável.
+ * Ex: "2026-12" -> "Dez/2026", "2027-07" -> "Jul/2027"
+ */
+export function formatDeadline(deadline?: string): string {
+  if (!deadline) return "";
+  if (/^\d{4}-\d{2}$/.test(deadline)) {
+    const [year, month] = deadline.split("-");
+    const date = new Date(Number(year), Number(month) - 1, 1);
+    const monthName = date.toLocaleDateString("pt-BR", { month: "short" });
+    const formattedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1).replace(".", "");
+    return `${formattedMonth}/${year}`;
+  }
+  return deadline;
 }
 
 /**

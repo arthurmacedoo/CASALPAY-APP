@@ -124,3 +124,16 @@ export const groupMemberDocRef = (groupId: string, userId: string) =>
 /** Documento de perfil do usuário (users/{userId}) */
 export const userDocRef = (userId: string) =>
   doc(db, "users", userId);
+
+/** Coleção de Metas do grupo: groups/{groupId}/goals */
+export const goalsRef = (groupId: string) =>
+  collection(db, "groups", groupId, "goals");
+
+/** Referência a uma meta específica */
+export const goalDocRef = (groupId: string, goalId: string) =>
+  doc(db, "groups", groupId, "goals", goalId);
+
+/** Subcoleção de aportes de uma meta: groups/{groupId}/goals/{goalId}/contributions */
+export const goalContributionsRef = (groupId: string, goalId: string) =>
+  collection(db, "groups", groupId, "goals", goalId, "contributions");
+

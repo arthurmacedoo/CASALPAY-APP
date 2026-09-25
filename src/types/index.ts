@@ -282,3 +282,57 @@ export interface BalanceSummary {
    */
   directDebts: DirectDebt[];
 }
+
+// ─── Metas & Investimentos do Casal (Aba Metas) ──────────────────────────────
+
+export type ContributorType = "arthur" | "zara" | "split";
+
+export interface Goal {
+  id: string;
+  groupId: string;
+  title: string;
+  category: string;
+  emoji: string;
+  targetAmount: number;   // em centavos
+  currentAmount: number;  // em centavos
+  deadline?: string;      // YYYY-MM
+  status: "in_progress" | "completed";
+  contributionsByMember: Record<string, number>; // { [userId]: totalEmCentavos }
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GoalContribution {
+  id: string;
+  goalId: string;
+  amount: number; // em centavos
+  contributorType: ContributorType;
+  contributedByUserId: string;
+  memberAmounts: Record<string, number>; // { [userId]: centavos }
+  date: string;     // YYYY-MM-DD
+  monthKey: string; // YYYY-MM
+  note?: string;
+  createdAt: string;
+}
+
+export interface GoalWithdrawal {
+  id: string;
+  goalId: string;
+  amount: number; // em centavos
+  reason: string;
+  contributorType: ContributorType;
+  withdrawnByUserId?: string;
+  date: string;
+  createdAt: string;
+}
+
+export interface GoalSummaryMetrics {
+  totalSaved: number;
+  monthlyInvested: number;
+  memberTotals: Record<string, number>;
+  memberPercentages: Record<string, number>;
+  overallProgress: number;
+  activeGoalsCount: number;
+  completedGoalsCount: number;
+}
+

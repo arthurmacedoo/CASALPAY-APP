@@ -4,6 +4,32 @@ Todas as alterações notáveis, correções e novos recursos deste projeto ser�
 
 ---
 
+## [1.5.0] - 2026-09-25
+### 🎯 Metas & Investimentos do Casal, Busca na Fatura e Experiência Mobile
+- **🎯 Nova Aba Metas & Investimentos**:
+  - Aba inovadora dedicada ao planejamento financeiro de médio e longo prazo do casal (viagens, reserva de emergência, casamentos, reformas e bens).
+  - **Isolamento Financeiro Total**: Transações e saldos de metas são 100% segregados do fluxo mensal de faturas e divisão de despesas rotineiras, garantindo integridade contábil mútua.
+  - **Distribuição de Aportes**: Suporte a aportes individuais (Arthur 100%, Zara 100%) ou divididos igualmente (50/50), com cálculo percentual exato em centavos.
+  - **Modo Sandbox Resiliente**: Arquitetura híbrida que opera perfeitamente mesmo em modo offline/local via LocalStorage caso as regras do Firestore estejam em implantação.
+- **🔍 Busca Inteligente & Histórico na Fatura**:
+  - Modal flutuante acionado pela lupa na fatura (`InvoiceSearchSheet`) otimizado com `useMemo` para busca instantânea por título, categoria e valor.
+  - Histórico de buscas recentes persistente com atalhos de remoção e limpeza.
+  - Navegação entre meses da fatura com contadores de itens encontrados.
+- **💳 Entrada Monetária Estilo Maquininha (POS)**:
+  - Campo de valor com digitação decimal da direita para a esquerda (`maskCurrencyInput`), idêntico à experiência de maquininhas de cartão, eliminando falhas de preenchimento.
+- **📅 Seletor Nativo de Prazos por Mês**:
+  - Seletor de mês nativo (`type="month"`) para estimativa de conclusão da meta, acompanhado de chips de seleção rápida (+3 meses, +6 meses, Dezembro e +1 ano).
+- **📜 Histórico Unificado de Movimentações (Aportes & Resgates)**:
+  - Registro cronológico detalhado diferenciando aportes (`+ R$`) e resgates (`- R$`) com identificação visual do membro responsável.
+  - Modal de resgate com dedução proporcional exata e proteção contra saldos negativos.
+- **📱 Polimento Mobile & Correções de Arquitetura**:
+  - Correção estrita na ordem de execução de Hooks (`Rules of Hooks`) no fechamento de modais.
+  - Fechamento imediato de modais e gavetas ao clicar no backdrop externo.
+  - Prevenção de auto-zoom indesejado no iOS Safari com fontes `text-base` em campos de entrada.
+  - Higienização profunda de valores no `parseToCents` para suportar colagens com `R$`, espaços e caracteres invisíveis de atalhos do iOS.
+
+---
+
 ## [1.2.2] - 2026-09-24
 ### 🎨 Centralização Toast & Correções UI
 - **🐛 Correção de Alinhamento do Toast**: O aviso flutuante de confirmação da fatura não é mais empurrado para a lateral da tela. Agora ele utiliza um container flexível de largura total (`left-0 right-0 flex justify-center`) que elimina colisões de CSS transform, garantindo alinhamento perfeitamente centralizado em qualquer dispositivo (iPhone 13, iPhone 15 Pro Max ou simulador Desktop).

@@ -10,6 +10,7 @@ import { calculateBalance, generatePixSummary, getMonthKey } from "../lib/calcul
 import { getCurrentMonthKey, formatMonthLabel, formatBRL, formatDateBR, getTodayDateString, sanitizeDateString } from "../lib/formatters";
 import { BalanceCard } from "../components/BalanceCard";
 import { TransactionItem } from "../components/TransactionItem";
+import { InvoiceSearchSheet } from "../components/InvoiceSearchSheet";
 import { AnniversaryCountdown } from "../components/AnniversaryCountdown";
 import { GroupSwitcherSheet } from "../components/GroupSwitcherSheet";
 import { GroupSettingsSheet } from "../components/GroupSettingsSheet";
@@ -144,17 +145,6 @@ export const HomePage: React.FC = () => {
   const { group, currentMember, members } = useGroupContext();
   const currentMonth = getCurrentMonthKey();
 
-  const { transactions, loading, error, updateTransaction } = useTransactions(currentMonth);
-  const { pendingTransactions, pendingCount, loading: pendingLoading } = usePendingTransactions();
-
-  const [copied, setCopied] = useState(false);
-  const [isGroupSheetOpen, setIsGroupSheetOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [selectedInvoiceUserId, setSelectedInvoiceUserId] = useState<string>(() => {
-    const requestedMember = new URLSearchParams(window.location.search).get("member");
-    return requestedMember || user?.uid || "";
-  });
-
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const requestedView = new URLSearchParams(window.location.search).get("view");
     if (requestedView === "shared" || requestedView === "personal" || requestedView === "pending") {
@@ -165,6 +155,20 @@ export const HomePage: React.FC = () => {
     return (stored === "shared" || stored === "personal" || stored === "pending")
       ? (stored as ViewMode)
       : "shared";
+  });
+
+  const [isInvoiceSearchOpen, setIsInvoiceSearchOpen] = useState<boolean>(false);
+  const [showAllTransactions, setShowAllTransactions] = useState<boolean>(false);
+
+  const { transactions, loading, error, updateTransaction, deleteTransaction } = useTransactions(currentMonth);
+  const { pendingTransactions, pendingCount, loading: pendingLoading } = usePendingTransactions();
+
+  const [copied, setCopied] = useState(false);
+  const [isGroupSheetOpen, setIsGroupSheetOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [selectedInvoiceUserId, setSelectedInvoiceUserId] = useState<string>(() => {
+    const requestedMember = new URLSearchParams(window.location.search).get("member");
+    return requestedMember || user?.uid || "";
   });
 
   const [pendingToast, setPendingToast] = useState<{
@@ -267,9 +271,12 @@ export const HomePage: React.FC = () => {
     viewMode === "personal" ? myTransactions      :
     pendingTransactions;
 
-  const recentTransactions = viewMode === "pending"
-    ? activeTransactions          // Pendentes: mostrar todos
-    : activeTransactions.slice(0, 5);
+  const recentTransactions = useMemo(() => {
+    if (viewMode === "pending" || showAllTransactions) {
+      return activeTransactions;
+    }
+    return activeTransactions.slice(0, 5);
+  }, [viewMode, showAllTransactions, activeTransactions]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
   const handleCopyPix = async () => {
@@ -611,9 +618,20 @@ export const HomePage: React.FC = () => {
           />
         ) : viewMode === "personal" ? (
           <div className="card animate-fade-in-up">
-            <p className="text-sm text-text-muted mb-1 font-medium text-center">
-              {isViewingMyOwnInvoice ? "Total da Minha Fatura" : `Total da Fatura (${invoiceOwnerName})`}
-            </p>
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="w-8" />
+              <p className="text-sm text-text-muted font-medium text-center flex-1">
+                {isViewingMyOwnInvoice ? "Total da Minha Fatura" : `Total da Fatura (${invoiceOwnerName})`}
+              </p>
+              <button
+                id="btn-fatura-card-search"
+                onClick={() => setIsInvoiceSearchOpen(true)}
+                className="w-8 h-8 rounded-full bg-accent-pink/15 hover:bg-accent-pink/25 border border-accent-pink/40 text-accent-pink flex items-center justify-center text-xs transition-all active:scale-90 shadow-sm"
+                title="Histórico de buscas e compras da fatura"
+              >
+                🔍
+              </button>
+            </div>
             <p className="text-3xl font-bold text-center tabular-nums text-text-primary mb-3">
               {formatBRL(Math.max(0, myInvoiceTotal))}
             </p>
@@ -660,14 +678,25 @@ export const HomePage: React.FC = () => {
                   ? "Minha Fatura"
                   : `Fatura de ${invoiceOwnerName}`}
               </h2>
-              {activeTransactions.length > 5 && (
+              {viewMode === "personal" ? (
                 <button
-                  onClick={() => navigate("/history")}
-                  className="text-sm text-accent-pink font-medium"
+                  id="btn-open-invoice-search"
+                  onClick={() => setIsInvoiceSearchOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-bg-elevated border border-border/80 hover:border-accent-pink/50 text-text-secondary hover:text-text-primary text-xs font-semibold shadow-sm transition-all active:scale-95"
                 >
-                  Ver todas →
+                  <span className="text-accent-pink">🔍</span>
+                  <span>Buscar & Histórico</span>
                 </button>
-              )}
+              ) : activeTransactions.length > 5 ? (
+                <button
+                  onClick={() => setShowAllTransactions(!showAllTransactions)}
+                  className="text-xs text-accent-pink font-semibold hover:underline"
+                >
+                  {showAllTransactions
+                    ? "Mostrar menos ↑"
+                    : `Ver todas (${activeTransactions.length}) →`}
+                </button>
+              ) : null}
             </div>
           )}
 
@@ -769,7 +798,22 @@ export const HomePage: React.FC = () => {
           </span>
         </div>
       </div>
-      
+
+      <InvoiceSearchSheet
+        isOpen={isInvoiceSearchOpen}
+        onClose={() => setIsInvoiceSearchOpen(false)}
+        activeMember={activeInvoiceMember}
+        groupId={group?.id || ""}
+        initialTransactions={myTransactions}
+        onEditTransaction={(t) => {
+          setIsInvoiceSearchOpen(false);
+          navigate("/add", { state: { transaction: t } });
+        }}
+        onDeleteTransaction={async (t) => {
+          await deleteTransaction(t);
+        }}
+      />
+
       <GroupSettingsSheet isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
 
       {/* Toast flutuante de confirmação de despesa pendente */}

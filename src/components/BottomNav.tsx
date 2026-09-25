@@ -22,11 +22,11 @@ const PlusIcon = () => (
   </svg>
 );
 
-const HistoryIcon = ({ filled }: { filled?: boolean }) => (
+const GoalsIcon = ({ filled }: { filled?: boolean }) => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={filled ? "2.5" : "2"} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 8V12L15 15" />
-    <path d="M3.05 11A9 9 0 1 0 4 7" strokeDasharray={filled ? "0" : "0"} />
-    <path d="M3 3V7H7" />
+    <circle cx="12" cy="12" r="9" />
+    <circle cx="12" cy="12" r="5" />
+    <circle cx="12" cy="12" r="2" fill={filled ? "currentColor" : "none"} />
   </svg>
 );
 
@@ -53,10 +53,10 @@ export const BottomNav: React.FC = () => {
       activeIcon: <PlusIcon />,
     },
     {
-      to: "/history",
-      label: "Histórico",
-      icon: <HistoryIcon />,
-      activeIcon: <HistoryIcon filled />,
+      to: "/goals",
+      label: "Metas",
+      icon: <GoalsIcon />,
+      activeIcon: <GoalsIcon filled />,
     },
     {
       to: "/messages",

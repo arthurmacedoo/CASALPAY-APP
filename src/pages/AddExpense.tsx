@@ -8,7 +8,7 @@ import type {
   SettlementFormData,
 } from "../types";
 import { parseToCents, getMonthKey } from "../lib/calculations";
-import { getTodayDateString, getCurrentMonthKey, formatBRL, sanitizeDateString } from "../lib/formatters";
+import { getTodayDateString, getCurrentMonthKey, formatBRL, formatBRLRaw, maskCurrencyInput, sanitizeDateString } from "../lib/formatters";
 import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
 import { useGroupContext } from "../contexts/GroupContext";
@@ -106,7 +106,7 @@ export const AddExpensePage: React.FC = () => {
         return {
           type: "expense",
           description: editTransaction.description,
-          amount: (displayAmount / 100).toFixed(2).replace(".", ","),
+          amount: formatBRLRaw(displayAmount),
           date: safeDate,
           paidByUserId: inferredPayer,
           splitBetweenUserIds: editTransaction.splitBetweenUserIds ?? memberIds,
@@ -125,7 +125,7 @@ export const AddExpensePage: React.FC = () => {
         return {
           type: "settlement",
           description: editTransaction.description,
-          amount: (displayAmount / 100).toFixed(2).replace(".", ","),
+          amount: formatBRLRaw(displayAmount),
           date: safeDate,
           fromUserId: editTransaction.fromUserId ?? defaultPayerUid,
           toUserId: editTransaction.toUserId ?? defaultRecipientUid,
@@ -266,18 +266,9 @@ export const AddExpensePage: React.FC = () => {
     }
   };
 
-  // ─── Handler de valor monetário ───────────────────────────────────────────
+  // ─── Handler de valor monetário (Máscara estilo Maquininha) ──────────────
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const digits = e.target.value.replace(/\D/g, "");
-    if (!digits) {
-      setForm((f) => ({ ...f, amount: "" }));
-      return;
-    }
-    const numericValue = parseInt(digits, 10);
-    const stringValue = numericValue.toString().padStart(3, "0");
-    const integerPart = stringValue.slice(0, -2);
-    const decimalPart = stringValue.slice(-2);
-    setForm((f) => ({ ...f, amount: `${integerPart},${decimalPart}` }));
+    setForm((f) => ({ ...f, amount: maskCurrencyInput(e.target.value) }));
   };
 
   const isExpense = form.type === "expense";
