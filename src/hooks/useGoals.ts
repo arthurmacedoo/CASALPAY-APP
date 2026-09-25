@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { onSnapshot, setDoc, doc, deleteDoc, collection } from "firebase/firestore";
 import { useGroupContext } from "../contexts/GroupContext";
 import { getCurrentMonthKey, getTodayDateString } from "../lib/formatters";
+import { db, goalsRef, goalDocRef } from "../lib/firebase";
 import type {
   Goal,
   GoalContribution,
@@ -9,10 +11,17 @@ import type {
   ContributorType,
 } from "../types";
 
-const SANDBOX_STORAGE_KEY_PREFIX = "casalpay_sandbox_goals_";
-const SANDBOX_CONTRIBS_KEY_PREFIX = "casalpay_sandbox_contribs_";
-const SANDBOX_WITHDRAWALS_KEY_PREFIX = "casalpay_sandbox_withdrawals_";
-const IS_SANDBOX_KEY = "casalpay_goals_is_sandbox";
+const GOALS_STORAGE_KEY_PREFIX = "casalpay_goals_";
+const CONTRIBS_STORAGE_KEY_PREFIX = "casalpay_contribs_";
+const WITHDRAWALS_STORAGE_KEY_PREFIX = "casalpay_withdrawals_";
+
+// Chaves legadas do sandbox para auto-limpeza em dispositivos reais
+const LEGACY_SANDBOX_KEYS = [
+  "casalpay_sandbox_goals_",
+  "casalpay_sandbox_contribs_",
+  "casalpay_sandbox_withdrawals_",
+  "casalpay_goals_is_sandbox",
+];
 
 export function isGroupAllowedForGoals(groupName?: string): boolean {
   if (!groupName) return false;
@@ -32,12 +41,6 @@ export function useGoals() {
     return isGroupAllowedForGoals(group?.name);
   }, [group?.name]);
 
-  // Modo Sandbox ativo por padrão para garantir testes 100% seguros
-  const [isSandboxMode, setIsSandboxMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem(IS_SANDBOX_KEY);
-    return saved !== null ? saved === "true" : true;
-  });
-
   const [goals, setGoals] = useState<Goal[]>([]);
   const [contributions, setContributions] = useState<GoalContribution[]>([]);
   const [withdrawals, setWithdrawals] = useState<GoalWithdrawal[]>([]);
@@ -56,7 +59,24 @@ export function useGoals() {
     return found?.userId || members[1]?.userId || "zara_id";
   }, [members, arthurUid]);
 
-  // Carregar dados (Sandbox LocalStorage por padrão)
+  // Persistir alterações em cache local
+  const persistLocal = useCallback(
+    (newGoals: Goal[], newContribs?: GoalContribution[], newWithdrawals?: GoalWithdrawal[]) => {
+      setGoals(newGoals);
+      localStorage.setItem(`${GOALS_STORAGE_KEY_PREFIX}${groupId}`, JSON.stringify(newGoals));
+      if (newContribs) {
+        setContributions(newContribs);
+        localStorage.setItem(`${CONTRIBS_STORAGE_KEY_PREFIX}${groupId}`, JSON.stringify(newContribs));
+      }
+      if (newWithdrawals) {
+        setWithdrawals(newWithdrawals);
+        localStorage.setItem(`${WITHDRAWALS_STORAGE_KEY_PREFIX}${groupId}`, JSON.stringify(newWithdrawals));
+      }
+    },
+    [groupId]
+  );
+
+  // Carregar dados e escutar em tempo real (Firestore com fallback de Cache Local)
   useEffect(() => {
     if (!group) {
       setLoading(false);
@@ -64,107 +84,126 @@ export function useGoals() {
     }
 
     setLoading(true);
+
+    // 1. Limpeza proativa de qualquer dado fictício de sandbox armazenado no aparelho
     try {
-      if (isSandboxMode) {
-        const storedGoals = localStorage.getItem(`${SANDBOX_STORAGE_KEY_PREFIX}${groupId}`);
-        const storedContribs = localStorage.getItem(`${SANDBOX_CONTRIBS_KEY_PREFIX}${groupId}`);
-        const storedWithdrawals = localStorage.getItem(`${SANDBOX_WITHDRAWALS_KEY_PREFIX}${groupId}`);
+      LEGACY_SANDBOX_KEYS.forEach((k) => {
+        localStorage.removeItem(`${k}${groupId}`);
+        localStorage.removeItem(k);
+      });
+    } catch {
+      // Ignorar erros de quota/storage
+    }
 
-        if (storedWithdrawals) {
-          setWithdrawals(JSON.parse(storedWithdrawals));
-        } else {
-          setWithdrawals([]);
-        }
+    // 2. Carrega cache local imediato (filtrando qualquer resíduo fictício)
+    try {
+      const storedGoals = localStorage.getItem(`${GOALS_STORAGE_KEY_PREFIX}${groupId}`);
+      const storedContribs = localStorage.getItem(`${CONTRIBS_STORAGE_KEY_PREFIX}${groupId}`);
+      const storedWithdrawals = localStorage.getItem(`${WITHDRAWALS_STORAGE_KEY_PREFIX}${groupId}`);
 
-        if (storedGoals) {
-          setGoals(JSON.parse(storedGoals));
-        } else {
-          // Metas de demonstração acolhedoras para o primeiro uso do Sandbox
-          const initialGoals: Goal[] = [
-            {
-              id: "sandbox_reserva",
-              groupId,
-              title: "Reserva de Emergência",
-              category: "Segurança",
-              emoji: "🛡️",
-              targetAmount: 3000000, // R$ 30.000,00
-              currentAmount: 1250000, // R$ 12.500,00
-              status: "in_progress",
-              contributionsByMember: {
-                [arthurUid]: 750000, // R$ 7.500,00 (60%)
-                [zaraUid]: 500000,   // R$ 5.000,00 (40%)
-              },
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            },
-            {
-              id: "sandbox_viagem",
-              groupId,
-              title: "Próxima Viagem do Casal",
-              category: "Viagem",
-              emoji: "✈️",
-              targetAmount: 1200000, // R$ 12.000,00
-              currentAmount: 480000,  // R$ 4.800,00
-              status: "in_progress",
-              contributionsByMember: {
-                [arthurUid]: 240000, // R$ 2.400,00 (50%)
-                [zaraUid]: 240000,   // R$ 2.400,00 (50%)
-              },
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            },
-          ];
-          setGoals(initialGoals);
-          localStorage.setItem(`${SANDBOX_STORAGE_KEY_PREFIX}${groupId}`, JSON.stringify(initialGoals));
-        }
+      if (storedGoals) {
+        const parsed: Goal[] = JSON.parse(storedGoals);
+        const realGoals = parsed.filter((g) => !g.id.startsWith("sandbox_"));
+        setGoals(realGoals);
+      } else {
+        setGoals([]);
+      }
 
-        if (storedContribs) {
-          setContributions(JSON.parse(storedContribs));
-        } else {
-          // Histórico inicial de exemplo no Sandbox
-          const currentMonth = getCurrentMonthKey();
-          const today = getTodayDateString();
-          const initialContribs: GoalContribution[] = [
-            {
-              id: "contrib_demo_1",
-              goalId: "sandbox_reserva",
-              amount: 100000, // R$ 1.000,00
-              contributorType: "split",
-              contributedByUserId: arthurUid,
-              memberAmounts: { [arthurUid]: 50000, [zaraUid]: 50000 },
-              date: today,
-              monthKey: currentMonth,
-              note: "Aporte conjunto inicial",
-              createdAt: new Date().toISOString(),
-            },
-          ];
-          setContributions(initialContribs);
-          localStorage.setItem(`${SANDBOX_CONTRIBS_KEY_PREFIX}${groupId}`, JSON.stringify(initialContribs));
-        }
+      if (storedContribs) {
+        const parsed: GoalContribution[] = JSON.parse(storedContribs);
+        const realContribs = parsed.filter(
+          (c) => !c.id.startsWith("contrib_demo_") && !c.goalId.startsWith("sandbox_")
+        );
+        setContributions(realContribs);
+      } else {
+        setContributions([]);
+      }
+
+      if (storedWithdrawals) {
+        const parsed: GoalWithdrawal[] = JSON.parse(storedWithdrawals);
+        setWithdrawals(parsed.filter((w) => !w.goalId.startsWith("sandbox_")));
+      } else {
+        setWithdrawals([]);
       }
     } catch (e) {
-      console.error("Erro ao carregar metas em sandbox:", e);
-    } finally {
+      console.warn("Aviso ao ler cache local de metas:", e);
+    }
+
+    // 3. Sincronização em tempo real com Firestore (Arthur e Zara compartilham as mesmas metas)
+    let unsubGoals: (() => void) | undefined;
+    let unsubContribs: (() => void) | undefined;
+    let unsubWithdrawals: (() => void) | undefined;
+
+    try {
+      const gRef = goalsRef(groupId);
+      unsubGoals = onSnapshot(
+        gRef,
+        (snapshot) => {
+          const remoteGoals: Goal[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as Goal;
+            if (!data.id?.startsWith("sandbox_")) {
+              remoteGoals.push({ ...data, id: docSnap.id });
+            }
+          });
+          setGoals(remoteGoals);
+          localStorage.setItem(`${GOALS_STORAGE_KEY_PREFIX}${groupId}`, JSON.stringify(remoteGoals));
+          setLoading(false);
+        },
+        (err) => {
+          console.warn("Firestore metas em modo local:", err.message);
+          setLoading(false);
+        }
+      );
+
+      const cRef = collection(db, "groups", groupId, "goal_contributions");
+      unsubContribs = onSnapshot(
+        cRef,
+        (snapshot) => {
+          const remoteContribs: GoalContribution[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as GoalContribution;
+            if (!data.id?.startsWith("contrib_demo_") && !data.goalId?.startsWith("sandbox_")) {
+              remoteContribs.push({ ...data, id: docSnap.id });
+            }
+          });
+          setContributions(remoteContribs);
+          localStorage.setItem(`${CONTRIBS_STORAGE_KEY_PREFIX}${groupId}`, JSON.stringify(remoteContribs));
+        },
+        (err) => {
+          console.warn("Firestore contribuições em modo local:", err.message);
+        }
+      );
+
+      const wRef = collection(db, "groups", groupId, "goal_withdrawals");
+      unsubWithdrawals = onSnapshot(
+        wRef,
+        (snapshot) => {
+          const remoteWithdrawals: GoalWithdrawal[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as GoalWithdrawal;
+            if (!data.goalId?.startsWith("sandbox_")) {
+              remoteWithdrawals.push({ ...data, id: docSnap.id });
+            }
+          });
+          setWithdrawals(remoteWithdrawals);
+          localStorage.setItem(`${WITHDRAWALS_STORAGE_KEY_PREFIX}${groupId}`, JSON.stringify(remoteWithdrawals));
+        },
+        (err) => {
+          console.warn("Firestore resgates em modo local:", err.message);
+        }
+      );
+    } catch (e) {
+      console.warn("Erro ao configurar listeners de metas:", e);
       setLoading(false);
     }
-  }, [groupId, isSandboxMode, arthurUid, zaraUid, group]);
 
-  // Persistir alterações no Sandbox
-  const persistSandbox = useCallback(
-    (newGoals: Goal[], newContribs?: GoalContribution[], newWithdrawals?: GoalWithdrawal[]) => {
-      setGoals(newGoals);
-      localStorage.setItem(`${SANDBOX_STORAGE_KEY_PREFIX}${groupId}`, JSON.stringify(newGoals));
-      if (newContribs) {
-        setContributions(newContribs);
-        localStorage.setItem(`${SANDBOX_CONTRIBS_KEY_PREFIX}${groupId}`, JSON.stringify(newContribs));
-      }
-      if (newWithdrawals) {
-        setWithdrawals(newWithdrawals);
-        localStorage.setItem(`${SANDBOX_WITHDRAWALS_KEY_PREFIX}${groupId}`, JSON.stringify(newWithdrawals));
-      }
-    },
-    [groupId]
-  );
+    return () => {
+      unsubGoals?.();
+      unsubContribs?.();
+      unsubWithdrawals?.();
+    };
+  }, [groupId, group]);
 
   // Cálculos consolidados em tempo real
   const metrics: GoalSummaryMetrics = useMemo(() => {
@@ -251,9 +290,10 @@ export function useGoals() {
       };
 
       let nextContribs = contributions;
+      let initialContrib: GoalContribution | null = null;
       if (initial > 0) {
         const today = getTodayDateString();
-        const initialContrib: GoalContribution = {
+        initialContrib = {
           id: `contrib_init_${Date.now()}`,
           goalId: newGoal.id,
           amount: initial,
@@ -272,10 +312,24 @@ export function useGoals() {
       }
 
       const updated = [newGoal, ...goals];
-      persistSandbox(updated, nextContribs);
+      persistLocal(updated, nextContribs);
+
+      // Persistência no Firestore
+      try {
+        await setDoc(goalDocRef(groupId, newGoal.id), newGoal);
+        if (initialContrib) {
+          await setDoc(
+            doc(db, "groups", groupId, "goal_contributions", initialContrib.id),
+            initialContrib
+          );
+        }
+      } catch (err) {
+        console.warn("Meta salva em cache local (offline):", err);
+      }
+
       return newGoal;
     },
-    [groupId, goals, contributions, persistSandbox, arthurUid, zaraUid]
+    [groupId, goals, contributions, persistLocal, arthurUid, zaraUid]
   );
 
   const addContribution = useCallback(
@@ -334,10 +388,22 @@ export function useGoals() {
       const nextGoals = goals.map((g) => (g.id === goalId ? updatedGoal : g));
       const nextContribs = [newContrib, ...contributions];
 
-      persistSandbox(nextGoals, nextContribs);
+      persistLocal(nextGoals, nextContribs);
+
+      // Persistência no Firestore
+      try {
+        await setDoc(
+          doc(db, "groups", groupId, "goal_contributions", newContrib.id),
+          newContrib
+        );
+        await setDoc(goalDocRef(groupId, goalId), updatedGoal);
+      } catch (err) {
+        console.warn("Contribuição salva em cache local (offline):", err);
+      }
+
       return { updatedGoal, newContrib };
     },
-    [goals, contributions, persistSandbox, arthurUid, zaraUid]
+    [groupId, goals, contributions, persistLocal, arthurUid, zaraUid]
   );
 
   const withdrawGoal = useCallback(
@@ -402,10 +468,22 @@ export function useGoals() {
       const nextGoals = goals.map((g) => (g.id === goalId ? updatedGoal : g));
       const nextWithdrawals = [newWithdrawal, ...withdrawals];
 
-      persistSandbox(nextGoals, contributions, nextWithdrawals);
+      persistLocal(nextGoals, contributions, nextWithdrawals);
+
+      // Persistência no Firestore
+      try {
+        await setDoc(
+          doc(db, "groups", groupId, "goal_withdrawals", newWithdrawal.id),
+          newWithdrawal
+        );
+        await setDoc(goalDocRef(groupId, goalId), updatedGoal);
+      } catch (err) {
+        console.warn("Resgate salvo em cache local (offline):", err);
+      }
+
       return { updatedGoal, newWithdrawal };
     },
-    [goals, contributions, withdrawals, persistSandbox, arthurUid, zaraUid]
+    [groupId, goals, contributions, withdrawals, persistLocal, arthurUid, zaraUid]
   );
 
   const deleteGoal = useCallback(
@@ -413,27 +491,16 @@ export function useGoals() {
       const nextGoals = goals.filter((g) => g.id !== goalId);
       const nextContribs = contributions.filter((c) => c.goalId !== goalId);
       const nextWithdrawals = withdrawals.filter((w) => w.goalId !== goalId);
-      persistSandbox(nextGoals, nextContribs, nextWithdrawals);
+      persistLocal(nextGoals, nextContribs, nextWithdrawals);
+
+      try {
+        await deleteDoc(goalDocRef(groupId, goalId));
+      } catch (err) {
+        console.warn("Exclusão salva em cache local (offline):", err);
+      }
     },
-    [goals, contributions, withdrawals, persistSandbox]
+    [groupId, goals, contributions, withdrawals, persistLocal]
   );
-
-  const clearSandboxData = useCallback(() => {
-    localStorage.removeItem(`${SANDBOX_STORAGE_KEY_PREFIX}${groupId}`);
-    localStorage.removeItem(`${SANDBOX_CONTRIBS_KEY_PREFIX}${groupId}`);
-    localStorage.removeItem(`${SANDBOX_WITHDRAWALS_KEY_PREFIX}${groupId}`);
-    setGoals([]);
-    setContributions([]);
-    setWithdrawals([]);
-  }, [groupId]);
-
-  const toggleSandboxMode = useCallback(() => {
-    setIsSandboxMode((prev) => {
-      const next = !prev;
-      localStorage.setItem(IS_SANDBOX_KEY, String(next));
-      return next;
-    });
-  }, []);
 
   return {
     goals,
@@ -442,14 +509,11 @@ export function useGoals() {
     metrics,
     loading,
     isGroupSupported,
-    isSandboxMode,
     arthurUid,
     zaraUid,
     createGoal,
     addContribution,
     withdrawGoal,
     deleteGoal,
-    clearSandboxData,
-    toggleSandboxMode,
   };
 }

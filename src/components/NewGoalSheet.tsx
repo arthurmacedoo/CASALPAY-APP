@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { parseToCents } from "../lib/calculations";
-import { maskCurrencyInput, formatBRLRaw, getCurrentMonthKey } from "../lib/formatters";
+import { maskCurrencyInput, formatBRLRaw, getCurrentMonthKey, formatDeadline } from "../lib/formatters";
 
 interface NewGoalSheetProps {
   isOpen: boolean;
@@ -254,13 +254,21 @@ export const NewGoalSheet: React.FC<NewGoalSheetProps> = ({
                 </button>
               )}
             </div>
-            <input
-              type="month"
-              min={getCurrentMonthKey()}
-              value={deadline}
-              onChange={(e) => setDeadline(e.target.value)}
-              className="w-full bg-bg-elevated border border-border/80 focus:border-accent-pink rounded-2xl px-4 py-3 text-base text-text-primary outline-none transition-colors cursor-pointer [color-scheme:dark]"
-            />
+            <div className="relative">
+              <input
+                type="month"
+                min={getCurrentMonthKey()}
+                value={deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+                className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10 [color-scheme:dark]"
+              />
+              <div className="w-full bg-bg-elevated border border-border/80 rounded-2xl px-4 py-3 text-base flex items-center justify-between pointer-events-none">
+                <span className={deadline ? "text-text-primary font-semibold" : "text-text-muted"}>
+                  {deadline ? `🗓️ ${formatDeadline(deadline)}` : "Toque para selecionar o mês..."}
+                </span>
+                <span className="text-text-muted text-base">📅</span>
+              </div>
+            </div>
 
             {/* Chips Rápidos de Mês */}
             <div className="flex gap-1.5 mt-2 overflow-x-auto pb-1 scrollbar-hide">

@@ -137,3 +137,7 @@ export const goalDocRef = (groupId: string, goalId: string) =>
 export const goalContributionsRef = (groupId: string, goalId: string) =>
   collection(db, "groups", groupId, "goals", goalId, "contributions");
 
+/** Subcoleção de resgates de uma meta: groups/{groupId}/goals/{goalId}/withdrawals */
+export const goalWithdrawalsRef = (groupId: string, goalId: string) =>
+  collection(db, "groups", groupId, "goals", goalId, "withdrawals");
+

@@ -25,7 +25,6 @@ export const GoalsPage: React.FC = () => {
     addContribution,
     withdrawGoal,
     deleteGoal,
-    clearSandboxData,
   } = useGoals();
 
   const [hideBalance, setHideBalance] = useState<boolean>(() => {
@@ -240,32 +239,6 @@ export const GoalsPage: React.FC = () => {
             ))}
           </div>
         )}
-
-        {/* Badge do Modo Sandbox */}
-        <div className="mt-4 p-4 rounded-2xl bg-bg-elevated/60 border border-border flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-accent-green animate-pulse" />
-            <div>
-              <p className="font-semibold text-text-primary">
-                Modo Sandbox Ativo 🛡️
-              </p>
-              <p className="text-[11px] text-text-muted">
-                Dados salvos localmente no aparelho (sem afetar faturas).
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => {
-              if (window.confirm("Deseja restaurar as metas demonstrativas de teste?")) {
-                clearSandboxData();
-                window.location.reload();
-              }
-            }}
-            className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-text-secondary text-[11px] font-medium transition-colors"
-          >
-            Restaurar
-          </button>
-        </div>
       </div>
 
       {/* Sheets / Modais */}
