@@ -18,6 +18,7 @@ import type { GroupMember } from "../types";
 interface GroupSwitcherSheetProps {
   isOpen: boolean;
   onClose: () => void;
+  initialMode?: "create" | "join" | null;
 }
 
 function getMemberEmoji(): string {
@@ -28,6 +29,7 @@ function getMemberEmoji(): string {
 export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
   isOpen,
   onClose,
+  initialMode,
 }) => {
   const { group, members, loading: activeLoading, switchGroup, createGroup, joinGroup, currentMember, removeMember } = useGroupContext();
   const { user } = useAuthContext();
@@ -44,6 +46,18 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
   const [memberToRemove, setMemberToRemove] = useState<GroupMember | null>(null);
   const [removingMember, setRemovingMember] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      if (initialMode === "create") {
+        setShowCreateForm(true);
+        setShowJoinForm(false);
+      } else if (initialMode === "join") {
+        setShowJoinForm(true);
+        setShowCreateForm(false);
+      }
+    }
+  }, [isOpen, initialMode]);
 
   const handleRemoveMember = async () => {
     if (!memberToRemove) return;
@@ -207,9 +221,24 @@ export const GroupSwitcherSheet: React.FC<GroupSwitcherSheetProps> = ({
         {/* ── Membros do grupo ativo ─────────────────────────────────────────────── */}
         {!activeLoading && group && currentMember && members.length > 0 && (
           <div className="mt-4">
-            <p className="text-xs font-semibold text-text-muted uppercase tracking-widest mb-2 px-1">
-              Membros
-            </p>
+            <div className="flex items-center justify-between mb-2 px-1">
+              <p className="text-xs font-semibold text-text-muted uppercase tracking-widest">
+                Membros ({members.length})
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (group?.id) {
+                    navigator.clipboard.writeText(group.id);
+                    toast.success("Código de convite copiado!");
+                  }
+                }}
+                className="text-xs font-semibold text-accent-blue hover:text-accent-blue/80 flex items-center gap-1 active:scale-95 transition-transform"
+                title="Copiar código de convite do grupo"
+              >
+                <span>🔗 Copiar Convite</span>
+              </button>
+            </div>
             <div className="flex flex-col gap-1">
               {members.map((m) => {
                 const isMe = m.userId === user?.uid;

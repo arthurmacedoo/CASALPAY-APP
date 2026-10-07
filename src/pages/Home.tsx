@@ -597,7 +597,9 @@ export const HomePage: React.FC = () => {
                       : "text-text-muted hover:text-text-secondary"
                   }`}
                 >
-                  {isMe ? "Sua Fatura" : `Fatura de ${firstName}`}
+                  {members.length > 2
+                    ? (isMe ? "Você" : firstName)
+                    : (isMe ? "Sua Fatura" : `Fatura de ${firstName}`)}
                 </button>
               );
             })}

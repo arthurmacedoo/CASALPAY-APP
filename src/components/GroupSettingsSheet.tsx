@@ -97,37 +97,58 @@ export const GroupSettingsSheet: React.FC<GroupSettingsSheetProps> = ({ isOpen, 
       {/* Conteúdo principal */}
       <div className="flex-1 px-5 pt-6 pb-12 flex flex-col gap-8">
         
-        {isCustomGroup && (
-          <>
-            {/* Seção 0: Código de Convite */}
-            <section className="flex flex-col gap-3">
-              <label className="text-xs font-semibold text-text-muted uppercase tracking-widest pl-1">Código de Convite</label>
-              <div className="flex items-center gap-2 bg-bg-elevated border border-border rounded-xl px-4 py-3">
-                <code className="flex-1 text-sm font-mono text-accent-blue truncate">{group?.id}</code>
-                <button 
-                  onClick={() => { navigator.clipboard.writeText(group?.id || ''); alert("Código copiado!"); }} 
-                  className="px-3 py-1.5 bg-accent-blue/10 text-accent-blue text-xs font-semibold rounded-lg hover:bg-accent-blue/20 transition-colors"
-                >
-                  Copiar
-                </button>
-              </div>
-              <p className="text-xs text-text-muted pl-1">Compartilhe este código para convidar membros.</p>
-            </section>
-
-            {/* Seção 1: Alterar Nome */}
-            <section className="flex flex-col gap-3">
-              <label className="text-xs font-semibold text-text-muted uppercase tracking-widest pl-1">Nome do Grupo</label>
-              <input 
-                type="text" 
-                value={name} 
-                onChange={(e) => setName(e.target.value)} 
-                className="w-full bg-bg-elevated border border-border rounded-xl px-4 py-4 text-sm text-text-primary focus:outline-none focus:border-accent-pink transition-colors"
-              />
-              <button onClick={handleSave} disabled={saving} className="mt-1 py-3.5 rounded-xl bg-accent-pink text-white text-sm font-semibold hover:bg-accent-pink/90 transition-colors disabled:opacity-50">
-                {saving ? 'Salvando...' : 'Salvar Alterações'}
+        {/* Seção: Código de Convite (Acessível a todos os membros do grupo) */}
+        {group?.id && (
+          <section className="flex flex-col gap-3">
+            <div className="flex items-center justify-between pl-1">
+              <label className="text-xs font-semibold text-text-muted uppercase tracking-widest">Código de Convite</label>
+              <span className="text-[11px] text-accent-blue font-medium">Toque para compartilhar</span>
+            </div>
+            <div className="flex items-center gap-2 bg-bg-elevated border border-border rounded-xl px-4 py-3">
+              <code className="flex-1 text-sm font-mono text-accent-blue truncate select-all">{group.id}</code>
+              <button 
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(group.id);
+                  toast.success("Código copiado para a área de transferência!");
+                }} 
+                className="px-3 py-1.5 bg-accent-blue/10 text-accent-blue text-xs font-semibold rounded-lg hover:bg-accent-blue/20 transition-colors"
+              >
+                Copiar
               </button>
-            </section>
-          </>
+              {typeof navigator !== "undefined" && typeof navigator.share === "function" && (
+                <button 
+                  type="button"
+                  onClick={() => {
+                    navigator.share({
+                      title: `CasalPay - Grupo ${group.name}`,
+                      text: `Entre no grupo "${group.name}" no CasalPay usando o código:\n${group.id}`,
+                    }).catch(() => {});
+                  }} 
+                  className="px-3 py-1.5 bg-accent-pink/10 text-accent-pink text-xs font-semibold rounded-lg hover:bg-accent-pink/20 transition-colors"
+                >
+                  Compartilhar
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-text-muted pl-1">Compartilhe este código para convidar seus pais ou parceiro(a) para o grupo.</p>
+          </section>
+        )}
+
+        {isCustomGroup && (
+          /* Seção: Alterar Nome do Grupo (Admin) */
+          <section className="flex flex-col gap-3">
+            <label className="text-xs font-semibold text-text-muted uppercase tracking-widest pl-1">Nome do Grupo</label>
+            <input 
+              type="text" 
+              value={name} 
+              onChange={(e) => setName(e.target.value)} 
+              className="w-full bg-bg-elevated border border-border rounded-xl px-4 py-4 text-sm text-text-primary focus:outline-none focus:border-accent-pink transition-colors"
+            />
+            <button onClick={handleSave} disabled={saving} className="mt-1 py-3.5 rounded-xl bg-accent-pink text-white text-sm font-semibold hover:bg-accent-pink/90 transition-colors disabled:opacity-50">
+              {saving ? 'Salvando...' : 'Salvar Alterações'}
+            </button>
+          </section>
         )}
 
         <div className="flex-1" /> {/* Spacer */}

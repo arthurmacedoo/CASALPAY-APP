@@ -9,7 +9,7 @@ import {
 } from "firebase/firestore";
 import { useGroupContext } from "../contexts/GroupContext";
 import { getCurrentMonthKey, getTodayDateString } from "../lib/formatters";
-import { db, goalsRef, goalDocRef } from "../lib/firebase";
+import { db, goalsRef, goalDocRef, COUPLE_ID } from "../lib/firebase";
 import type {
   Goal,
   GoalContribution,
@@ -30,23 +30,24 @@ const LEGACY_SANDBOX_KEYS = [
   "casalpay_goals_is_sandbox",
 ];
 
-export function isGroupAllowedForGoals(groupName?: string): boolean {
-  if (!groupName) return false;
-  const normalized = groupName.toLowerCase();
-  return (
-    normalized.includes("arthur") ||
-    normalized.includes("zara") ||
-    normalized.includes("teste") ||
-    normalized.includes("laborat")
-  );
+export function isGroupAllowedForGoals(groupId?: string, groupName?: string): boolean {
+  if (!groupId && !groupName) return false;
+  // Grupo oficial do casal configurado nas variáveis de ambiente
+  if (groupId && COUPLE_ID && groupId === COUPLE_ID) return true;
+  // Apenas grupos que contenham expressamente Arthur e Zara
+  if (groupName) {
+    const normalized = groupName.toLowerCase();
+    if (normalized.includes("arthur") && normalized.includes("zara")) return true;
+  }
+  return false;
 }
 
 export function useGoals() {
   const { group, members } = useGroupContext();
 
   const isGroupSupported = useMemo(() => {
-    return isGroupAllowedForGoals(group?.name);
-  }, [group?.name]);
+    return isGroupAllowedForGoals(group?.id, group?.name);
+  }, [group?.id, group?.name]);
 
   const [goals, setGoals] = useState<Goal[]>([]);
   const [contributions, setContributions] = useState<GoalContribution[]>([]);

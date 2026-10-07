@@ -290,9 +290,23 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
     const userProfileRef = userDocRef(user.uid);
 
     // Valida se o grupo existe antes de tentar entrar
-    const groupSnap = await getDoc(groupRef);
+    let groupSnap;
+    try {
+      groupSnap = await getDoc(groupRef);
+    } catch (err: any) {
+      console.error("[useActiveGroup] Erro ao buscar grupo com código de convite:", err);
+      throw new Error("Não foi possível acessar o grupo. Verifique o código de convite ou a conexão.");
+    }
+
     if (!groupSnap.exists()) {
-      throw new Error("Grupo não encontrado. Verifique o código.");
+      throw new Error("Grupo não encontrado. Verifique o código digitado.");
+    }
+
+    const groupData = groupSnap.data();
+    const isAlreadyMember = Array.isArray(groupData?.memberIds) && groupData.memberIds.includes(user.uid);
+    if (isAlreadyMember) {
+      await switchGroup(groupId);
+      return;
     }
 
     const q = query(collection(db, 'groups'), where('memberIds', 'array-contains', user.uid));
@@ -330,7 +344,7 @@ export function useActiveGroup(user: User | null): UseActiveGroupReturn {
 
     await batch.commit();
     setActiveGroupId(groupId);
-  }, [user]);
+  }, [user, switchGroup]);
 
   const removeMember = useCallback(async (targetUserId: string) => {
     if (!user || !activeGroupId || !isCurrentUserAdmin) return;

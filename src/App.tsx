@@ -34,6 +34,7 @@ const ProtectedGroupRoute: React.FC<{ children: React.ReactNode }> = ({ children
   const { groups: userGroups, loading: userGroupsLoading } = useUserGroups(user);
   
   const [isGroupSheetOpen, setIsGroupSheetOpen] = useState(false);
+  const [groupSheetMode, setGroupSheetMode] = useState<"create" | "join" | null>(null);
 
   // Aguarda resolver o contexto do grupo antes de decidir a tela
   if (authLoading || groupLoading || userGroupsLoading) {
@@ -46,12 +47,13 @@ const ProtectedGroupRoute: React.FC<{ children: React.ReactNode }> = ({ children
       <>
         <GroupHub 
           groups={userGroups} 
-          onOpenCreate={() => setIsGroupSheetOpen(true)} 
-          onOpenJoin={() => setIsGroupSheetOpen(true)} 
+          onOpenCreate={() => { setGroupSheetMode("create"); setIsGroupSheetOpen(true); }} 
+          onOpenJoin={() => { setGroupSheetMode("join"); setIsGroupSheetOpen(true); }} 
         />
         <GroupSwitcherSheet
           isOpen={isGroupSheetOpen}
-          onClose={() => setIsGroupSheetOpen(false)}
+          initialMode={groupSheetMode}
+          onClose={() => { setIsGroupSheetOpen(false); setGroupSheetMode(null); }}
         />
       </>
     );

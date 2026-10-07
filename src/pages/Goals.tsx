@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useGoals } from "../hooks/useGoals";
 import { useGroupContext } from "../contexts/GroupContext";
 import { useAuthContext } from "../contexts/AuthContext";
@@ -10,6 +11,7 @@ import { formatBRL } from "../lib/formatters";
 import type { Goal } from "../types";
 
 export const GoalsPage: React.FC = () => {
+  const navigate = useNavigate();
   const { group } = useGroupContext();
   const { user } = useAuthContext();
   const {
@@ -49,7 +51,7 @@ export const GoalsPage: React.FC = () => {
     return g.status === filterStatus;
   });
 
-  // ── Se o grupo não for suportado (ex: Brasília, amigos) ─────────────────────
+  // ── Se o grupo não for suportado (ex: viagem, pais, secundário) ─────────────
   if (!isGroupSupported) {
     return (
       <main className="flex-1 overflow-y-auto pb-24 px-6 pt-16 flex flex-col items-center justify-center text-center animate-fade-in-up">
@@ -57,21 +59,30 @@ export const GoalsPage: React.FC = () => {
           🔒
         </div>
         <h2 className="text-2xl font-bold text-text-primary mb-2">
-          Metas & Sonhos do Casal
+          Metas Indisponíveis Neste Grupo
         </h2>
         <p className="text-sm text-text-secondary max-w-sm mb-8 leading-relaxed">
-          Esta funcionalidade é exclusiva para o planejamento financeiro e investimentos conjuntos de{" "}
+          Esta funcionalidade é exclusiva para o planejamento e investimentos do grupo principal de{" "}
           <strong className="text-text-primary">Arthur & Zara</strong>.
           <br /><br />
-          No grupo atual (<span className="text-accent-pink font-semibold">{group?.name || "Secundário"}</span>), a gestão de metas está desativada para manter os gastos isolados.
+          No grupo atual (<span className="text-accent-pink font-semibold">{group?.name || "Viagem"}</span>), a gestão de metas está bloqueada para manter o foco apenas na divisão de despesas.
         </p>
 
-        <button
-          onClick={() => setIsGroupSheetOpen(true)}
-          className="w-full max-w-xs py-3.5 bg-gradient-to-r from-accent-pink to-[#A855F7] text-white font-bold rounded-2xl shadow-lg shadow-accent-pink/20 hover:opacity-90 active:scale-[0.98] transition-all"
-        >
-          Alterne para o Grupo do Casal
-        </button>
+        <div className="flex flex-col gap-3 w-full max-w-xs">
+          <button
+            onClick={() => navigate("/")}
+            className="w-full py-3.5 bg-bg-elevated border border-border text-text-primary font-semibold rounded-2xl hover:bg-white/5 active:scale-[0.98] transition-all"
+          >
+            ← Voltar ao Início
+          </button>
+
+          <button
+            onClick={() => setIsGroupSheetOpen(true)}
+            className="w-full py-3.5 bg-gradient-to-r from-accent-pink to-[#A855F7] text-white font-bold rounded-2xl shadow-lg shadow-accent-pink/20 hover:opacity-90 active:scale-[0.98] transition-all"
+          >
+            Alternar de Grupo
+          </button>
+        </div>
 
         <GroupSwitcherSheet
           isOpen={isGroupSheetOpen}

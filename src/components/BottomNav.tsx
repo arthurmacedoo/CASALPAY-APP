@@ -1,5 +1,7 @@
 import React from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { useGroupContext } from "../contexts/GroupContext";
+import { isGroupAllowedForGoals } from "../hooks/useGoals";
 
 interface NavItem {
   to: string;
@@ -30,6 +32,13 @@ const GoalsIcon = ({ filled }: { filled?: boolean }) => (
   </svg>
 );
 
+const HistoryIcon = ({ filled }: { filled?: boolean }) => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={filled ? "2.5" : "2"} strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="12 6 12 12 16 14" strokeWidth={filled ? "2.5" : "2"} />
+  </svg>
+);
+
 const HeartIcon = ({ filled }: { filled?: boolean }) => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
@@ -38,6 +47,8 @@ const HeartIcon = ({ filled }: { filled?: boolean }) => (
 
 export const BottomNav: React.FC = () => {
   const location = useLocation();
+  const { group } = useGroupContext();
+  const isGoalsSupported = isGroupAllowedForGoals(group?.id, group?.name);
 
   const navItems: NavItem[] = [
     {
@@ -52,12 +63,23 @@ export const BottomNav: React.FC = () => {
       icon: <PlusIcon />,
       activeIcon: <PlusIcon />,
     },
-    {
-      to: "/goals",
-      label: "Metas",
-      icon: <GoalsIcon />,
-      activeIcon: <GoalsIcon filled />,
-    },
+    ...(isGoalsSupported
+      ? [
+          {
+            to: "/goals",
+            label: "Metas",
+            icon: <GoalsIcon />,
+            activeIcon: <GoalsIcon filled />,
+          },
+        ]
+      : [
+          {
+            to: "/history",
+            label: "Histórico",
+            icon: <HistoryIcon />,
+            activeIcon: <HistoryIcon filled />,
+          },
+        ]),
     {
       to: "/messages",
       label: "Mensagens",

@@ -84,7 +84,7 @@ class FcmErrorBoundary extends Component<
 // ─── Componente principal ──────────────────────────────────────────────────
 export const MessagesPage: React.FC = () => {
   const { user } = useAuthContext();
-  const { group } = useGroupContext();
+  const { group, members, currentMember } = useGroupContext();
   const { permission, requestPermission, pushStatus } = useNotificationContext();
   
   const [sending, setSending] = useState<string | null>(null);
@@ -92,11 +92,23 @@ export const MessagesPage: React.FC = () => {
   const [sentCount, setSentCount] = useState<number>(0);
   const [error, setError]     = useState<string | null>(null);
 
-  const isOwner    = user?.email?.toLowerCase().startsWith("arthur");
-  const senderName = isOwner ? OWNER_NAME   : PARTNER_NAME;
-  const senderEmoji= isOwner ? OWNER_EMOJI  : PARTNER_EMOJI;
-  const targetName = isOwner ? PARTNER_NAME : OWNER_NAME;
-  const targetEmoji= isOwner ? PARTNER_EMOJI: OWNER_EMOJI;
+  const isOwner = Boolean(user?.email?.toLowerCase().startsWith("arthur"));
+  const otherMember = members.find((m) => m.userId !== user?.uid);
+  const isCoupleGroup = Boolean(
+    group?.name?.toLowerCase().includes("arthur") && group?.name?.toLowerCase().includes("zara")
+  );
+
+  const senderName = isCoupleGroup
+    ? (isOwner ? OWNER_NAME : PARTNER_NAME)
+    : (currentMember?.name?.split(" ")[0] || (isOwner ? OWNER_NAME : "Você"));
+
+  const senderEmoji = isCoupleGroup ? (isOwner ? OWNER_EMOJI : PARTNER_EMOJI) : "👤";
+
+  const targetName = isCoupleGroup
+    ? (isOwner ? PARTNER_NAME : OWNER_NAME)
+    : (otherMember?.name?.split(" ")[0] || "Família");
+
+  const targetEmoji = isCoupleGroup ? (isOwner ? PARTNER_EMOJI : OWNER_EMOJI) : "👤";
 
   const handleSend = async (msg: LoveMessage) => {
     if (sending) return;

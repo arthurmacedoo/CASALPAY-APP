@@ -25,10 +25,14 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
 
   const myDebts   = directDebts.filter((d) => d.debtorId   === currentMember?.userId);
   const myCredits = directDebts.filter((d) => d.creditorId === currentMember?.userId);
+  const otherDebts = directDebts.filter(
+    (d) => d.debtorId !== currentMember?.userId && d.creditorId !== currentMember?.userId
+  );
 
-  const isEven     = myDebts.length === 0 && myCredits.length === 0;
-  const hasDebts   = myDebts.length > 0;
-  const hasCredits = myCredits.length > 0;
+  const isAllSettled = directDebts.length === 0;
+  const isMeSettled  = myDebts.length === 0 && myCredits.length === 0;
+  const hasDebts     = myDebts.length > 0;
+  const hasCredits   = myCredits.length > 0;
 
   let borderClass   = "border-border";
   let glowClass     = "shadow-lg";
@@ -36,10 +40,16 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
   let statusMessage = "Tudo certo por enquanto 🙌";
   let colorClass    = "text-text-primary";
 
-  if (isEven) {
+  if (isAllSettled) {
     colorClass    = "text-accent-green";
     borderClass   = "border-accent-green/30";
     glowClass     = "shadow-[0_0_30px_rgba(74,222,128,0.12)]";
+  } else if (isMeSettled && otherDebts.length > 0) {
+    colorClass    = "text-accent-green";
+    borderClass   = "border-accent-green/30";
+    glowClass     = "shadow-[0_0_30px_rgba(74,222,128,0.12)]";
+    icon          = "✨";
+    statusMessage = "Sua parte está quitada";
   } else if (hasDebts && !hasCredits) {
     colorClass    = "text-accent-pink";
     borderClass   = "border-accent-pink/30";
@@ -80,12 +90,18 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
         </div>
 
         {/* Lista de dívidas */}
-        {isEven ? (
+        {isAllSettled ? (
           <div className={`text-4xl font-bold ${colorClass} mb-6`}>
             Zerado!
           </div>
         ) : (
           <div className="flex flex-col gap-2.5 mb-6 mt-2">
+            {isMeSettled && (
+              <div className="p-3 rounded-xl bg-accent-green/10 border border-accent-green/20 text-accent-green text-xs font-semibold flex items-center gap-2">
+                <span>✓</span>
+                <span>Você está em dia! Veja abaixo os acertos entre os outros membros:</span>
+              </div>
+            )}
 
             {/* Dívidas — você deve para alguém */}
             {myDebts.map((debt) => {
@@ -144,6 +160,36 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
                 </button>
               );
             })}
+
+            {/* Outros acertos do grupo (quando há mais membros) */}
+            {otherDebts.length > 0 && (
+              <div className="pt-2 border-t border-border/50 flex flex-col gap-2 mt-1">
+                <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider pl-1">
+                  Outros acertos no grupo
+                </span>
+                {otherDebts.map((debt) => {
+                  const debtor = members.find((m) => m.userId === debt.debtorId);
+                  const creditor = members.find((m) => m.userId === debt.creditorId);
+                  return (
+                    <button
+                      key={`other-${debt.debtorId}-${debt.creditorId}`}
+                      onClick={() => setSelectedDebt(debt)}
+                      className="w-full flex justify-between items-center bg-bg-elevated/70 hover:bg-bg-elevated p-3 rounded-xl border border-border/60 hover:border-border transition-all text-left group cursor-pointer"
+                    >
+                      <span className="text-xs text-text-secondary truncate">
+                        {debtor?.name.split(" ")[0] ?? "Membro"} deve a {creditor?.name.split(" ")[0] ?? "Membro"}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-sm font-bold text-text-primary tabular-nums">
+                          {formatBRL(debt.amount)}
+                        </span>
+                        <span className="text-text-muted text-xs group-hover:text-text-primary transition-colors">›</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

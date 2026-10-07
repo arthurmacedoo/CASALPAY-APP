@@ -4,6 +4,28 @@ Todas as alterações notáveis, correções e novos recursos deste projeto ser�
 
 ---
 
+## [1.5.2] - 2026-10-07
+### 👥 Compartilhamento Familiar, Bloqueio Seletivo de Metas e Refinamento de Grupos
+- **🔒 Correção de Convites em Grupos (`firestore.rules`)**:
+  - Ajuste de permissão `allow get: if isAuthed()` para documentos `/groups/{groupId}`, permitindo que convidados consultem o grupo pelo código (ID) para ingressar, enquanto a listagem/busca geral (`list`) permanece estritamente restrita a quem já é membro.
+  - Aprimoramento em `joinGroup` (`useActiveGroup.ts`) para detectar se o usuário já participa do grupo, ativando-o de forma imediata e evitando erros redundantes de permissão.
+- **🎯 Bloqueio e Ocultação Seletiva de Metas para Grupos Secundários**:
+  - Regra rigorosa `isGroupAllowedForGoals`: metas financeiras e patrimônio ficam restritas exclusivamente ao grupo principal do casal (`COUPLE_ID` ou contendo Arthur e Zara).
+  - No `BottomNav`, a aba "Metas" é ocultada automaticamente para qualquer outro grupo (ex: viagem com os pais), sendo substituída inteligentemente pela aba "Histórico" para consulta ágil de compras passadas por mês.
+  - Página `/goals` exibe tela de bloqueio com mensagem contextual e botão de retorno rápido à Home.
+- **📤 Compartilhamento Rápido de Convites**:
+  - Seção de Código de Convite em `GroupSettingsSheet` disponibilizada para todos os membros do grupo, com cópia direta para a área de transferência e integração nativa com `navigator.share` (WhatsApp/Mensagens).
+  - Atalho de cópia rápida de convite incluído no cabeçalho de membros do `GroupSwitcherSheet`.
+  - Parâmetro `initialMode` integrado ao `GroupHub`, abrindo o formulário de criação ou entrada imediatamente no primeiro toque.
+- **⚖️ Transparência Total na Divisão por Pessoa para Viagens**:
+  - No `BalanceCard`, inclusão do bloco "Outros acertos no grupo" para grupos com 3 ou mais membros, permitindo que qualquer pessoa da viagem acompanhe o fechamento mútuo de contas com transparência completa.
+  - Rótulos otimizados nas abas de fatura da Home quando o grupo possui mais de 2 membros, prevenindo sobreposição de texto em telas mobile.
+  - Desbloqueio da alternância de faturas individuais na página de Histórico para todos os membros.
+- **💌 Mensagens Dinâmicas com Nomes dos Membros do Grupo**:
+  - Adequação dos nomes de remetente e destinatário na aba Mensagens para refletir os participantes reais do grupo ativo.
+
+---
+
 ## [1.5.1] - 2026-09-25
 ### 🔒 Concorrência Atômica, Sincronização Offline e Blindagem de Segurança
 - **⚛️ Mutações Atômicas em Metas (`runTransaction`)**:

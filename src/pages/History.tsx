@@ -24,7 +24,7 @@ export const HistoryPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"shared" | "personal">("shared");
   const { user } = useAuthContext();
-  const { members, currentMember, isCurrentUserAdmin } = useGroupContext();
+  const { members, currentMember } = useGroupContext();
 
   const [selectedInvoiceMemberUserId, setSelectedInvoiceMemberUserId] = useState<string>(
     user?.uid || ""
@@ -146,12 +146,12 @@ export const HistoryPage: React.FC = () => {
                 : "text-text-muted hover:text-text-secondary"
             }`}
           >
-            {isCurrentUserAdmin ? "Faturas Individuais" : "Minha Fatura"}
+            {members.length > 1 ? "Faturas Individuais" : "Minha Fatura"}
           </button>
         </div>
       </div>
 
-      {activeTab === "personal" && isCurrentUserAdmin && (
+      {activeTab === "personal" && members.length > 1 && (
         <div className="px-5 mb-4">
           <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
             {members.map(m => {
