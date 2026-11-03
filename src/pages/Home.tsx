@@ -6,6 +6,7 @@ import { deleteDoc, setDoc, addDoc, serverTimestamp, getDocs, query, where, writ
 import { db, transactionDocRef, transactionsRef, COUPLE_ID, userDocRef } from "../lib/firebase";
 import { useAuthContext } from "../contexts/AuthContext";
 import { usePendingTransactions } from "../hooks/usePendingTransactions";
+import { useMonthCarryOver } from "../hooks/useMonthCarryOver";
 import { calculateBalance, generatePixSummary, getMonthKey } from "../lib/calculations";
 import { getCurrentMonthKey, formatMonthLabel, formatBRL, formatDateBR, getTodayDateString, sanitizeDateString } from "../lib/formatters";
 import { BalanceCard } from "../components/BalanceCard";
@@ -24,6 +25,8 @@ import {
   isInvoiceTransactionForMember,
   isSharedTransaction,
   calculatePersonalInvoiceTotal,
+  reconcileCarryOverForDisplay,
+  getSettledExpenseIds,
 } from "../lib/transactionVisibility";
 
 type ViewMode = "shared" | "personal" | "pending";
@@ -158,10 +161,14 @@ export const HomePage: React.FC = () => {
   });
 
   const [isInvoiceSearchOpen, setIsInvoiceSearchOpen] = useState<boolean>(false);
+  const [searchInitialScope, setSearchInitialScope] = useState<"shared" | "personal">("shared");
   const [showAllTransactions, setShowAllTransactions] = useState<boolean>(false);
 
   const { transactions, loading, error, updateTransaction, deleteTransaction } = useTransactions(currentMonth);
   const { pendingTransactions, pendingCount, loading: pendingLoading } = usePendingTransactions();
+
+  // Sincroniza e rola automaticamente pendências não quitadas do mês anterior
+  useMonthCarryOver(group?.id, members, currentMonth);
 
   const [copied, setCopied] = useState(false);
   const [isGroupSheetOpen, setIsGroupSheetOpen] = useState(false);
@@ -254,7 +261,28 @@ export const HomePage: React.FC = () => {
     [transactions, activeInvoiceMember]
   );
 
-  // ── Cálculos ─────────────────────────────────────────────────────────────────
+  // Lista reconciliada para exibição (oculta/abate cards de "Saldo anterior" já quitados no mês)
+  const displayTransactions = useMemo(
+    () => reconcileCarryOverForDisplay(transactions),
+    [transactions]
+  );
+
+  const settledExpenseIds = useMemo(
+    () => getSettledExpenseIds(transactions),
+    [transactions]
+  );
+
+  const displaySharedTransactions = useMemo(
+    () => displayTransactions.filter((t) => isSharedTransaction(t)),
+    [displayTransactions]
+  );
+
+  const displayMyTransactions = useMemo(
+    () => displayTransactions.filter((t) => isInvoiceTransactionForMember(t, activeInvoiceMember)),
+    [displayTransactions, activeInvoiceMember]
+  );
+
+  // ── Cálculos (usam sempre transactions brutas para manter matemática líquida exata) ──
   const balance = useMemo(
     () => calculateBalance(sharedTransactions, members),
     [sharedTransactions, members]
@@ -267,8 +295,8 @@ export const HomePage: React.FC = () => {
 
   // ── Lista ativa por aba ───────────────────────────────────────────────────────
   const activeTransactions =
-    viewMode === "shared"   ? sharedTransactions  :
-    viewMode === "personal" ? myTransactions      :
+    viewMode === "shared"   ? displaySharedTransactions  :
+    viewMode === "personal" ? displayMyTransactions      :
     pendingTransactions;
 
   const recentTransactions = useMemo(() => {
@@ -627,24 +655,86 @@ export const HomePage: React.FC = () => {
               </p>
               <button
                 id="btn-fatura-card-search"
-                onClick={() => setIsInvoiceSearchOpen(true)}
+                onClick={() => {
+                  setSearchInitialScope("personal");
+                  setIsInvoiceSearchOpen(true);
+                }}
                 className="w-8 h-8 rounded-full bg-accent-pink/15 hover:bg-accent-pink/25 border border-accent-pink/40 text-accent-pink flex items-center justify-center text-xs transition-all active:scale-90 shadow-sm"
                 title="Histórico de buscas e compras da fatura"
               >
                 🔍
               </button>
             </div>
-            <p className="text-3xl font-bold text-center tabular-nums text-text-primary mb-3">
-              {formatBRL(Math.max(0, myInvoiceTotal))}
-            </p>
+            <div
+              className={`text-center mb-3 ${myInvoiceTotal > 0 ? "cursor-pointer group" : ""}`}
+              onClick={
+                myInvoiceTotal > 0
+                  ? () => {
+                      const amountStr = (myInvoiceTotal / 100).toFixed(2).replace(".", ",");
+                      const monthLabel = formatMonthLabel(currentMonth).split(" ")[0];
+                      navigate("/add", {
+                        state: {
+                          prefillSettlement: {
+                            type: "settlement",
+                            settlementMode: "invoice",
+                            personalOwnerUserId: activeInvoiceMember?.userId,
+                            amount: amountStr,
+                            description: `Pagamento fatura · ${monthLabel}`,
+                            fromUserId: activeInvoiceMember?.userId,
+                            toUserId: activeInvoiceMember?.userId || "",
+                          },
+                        },
+                      });
+                    }
+                  : undefined
+              }
+            >
+              <p className="text-3xl font-bold tabular-nums text-text-primary group-hover:text-accent-pink transition-colors">
+                {formatBRL(Math.max(0, myInvoiceTotal))}
+              </p>
+              {myInvoiceTotal > 0 && (
+                <div className="flex justify-center mt-2.5">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const amountStr = (myInvoiceTotal / 100).toFixed(2).replace(".", ",");
+                      const monthLabel = formatMonthLabel(currentMonth).split(" ")[0];
+                      navigate("/add", {
+                        state: {
+                          prefillSettlement: {
+                            type: "settlement",
+                            settlementMode: "invoice",
+                            personalOwnerUserId: activeInvoiceMember?.userId,
+                            amount: amountStr,
+                            description: `Pagamento fatura · ${monthLabel}`,
+                            fromUserId: activeInvoiceMember?.userId,
+                            toUserId: activeInvoiceMember?.userId || "",
+                          },
+                        },
+                      });
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-accent-green/15 hover:bg-accent-green/25 border border-accent-green/40 text-accent-green text-xs font-bold shadow-sm transition-all active:scale-95"
+                  >
+                    <span>💸</span>
+                    <span>Pagar Fatura com Pix</span>
+                  </button>
+                </div>
+              )}
+            </div>
             {myInvoiceTotal < 0 ? (
               <p className="text-xs text-accent-green text-center">
                 Crédito de {formatBRL(Math.abs(myInvoiceTotal))} para a próxima fatura
               </p>
             ) : (
               <div className="flex items-center justify-between text-xs text-text-muted border-t border-border pt-3 mt-1">
-                <span>{myTransactions.filter((t) => t.type === "expense").length} compras</span>
-                <span>{myTransactions.filter((t) => t.type === "settlement").length} pagamentos</span>
+                <span>{myTransactions.filter((t) => t.type === "expense" && !t.carryOver).length} compras</span>
+                {displayMyTransactions.some((t) => t.carryOver) && (
+                  <span className="text-amber-400 font-medium">
+                    + saldo anterior
+                  </span>
+                )}
+                <span>{myTransactions.filter((t) => t.type === "settlement" && !t.carryOver).length} pagamentos</span>
               </div>
             )}
           </div>
@@ -680,10 +770,37 @@ export const HomePage: React.FC = () => {
                   ? "Minha Fatura"
                   : `Fatura de ${invoiceOwnerName}`}
               </h2>
-              {viewMode === "personal" ? (
+              {viewMode === "shared" ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    id="btn-open-shared-search"
+                    onClick={() => {
+                      setSearchInitialScope("shared");
+                      setIsInvoiceSearchOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-bg-elevated border border-border/80 hover:border-accent-pink/50 text-text-secondary hover:text-text-primary text-xs font-semibold shadow-sm transition-all active:scale-95"
+                  >
+                    <span className="text-accent-pink">🔍</span>
+                    <span>Buscar & Histórico</span>
+                  </button>
+                  {activeTransactions.length > 5 && (
+                    <button
+                      onClick={() => setShowAllTransactions(!showAllTransactions)}
+                      className="text-xs text-accent-pink font-semibold hover:underline"
+                    >
+                      {showAllTransactions
+                        ? "Mostrar menos ↑"
+                        : `Ver todas (${activeTransactions.length}) →`}
+                    </button>
+                  )}
+                </div>
+              ) : viewMode === "personal" ? (
                 <button
                   id="btn-open-invoice-search"
-                  onClick={() => setIsInvoiceSearchOpen(true)}
+                  onClick={() => {
+                    setSearchInitialScope("personal");
+                    setIsInvoiceSearchOpen(true);
+                  }}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-bg-elevated border border-border/80 hover:border-accent-pink/50 text-text-secondary hover:text-text-primary text-xs font-semibold shadow-sm transition-all active:scale-95"
                 >
                   <span className="text-accent-pink">🔍</span>
@@ -772,7 +889,11 @@ export const HomePage: React.FC = () => {
           ) : (
             <div className="flex flex-col gap-3">
               {recentTransactions.map((t) => (
-                <TransactionItem key={t.id} transaction={t} />
+                <TransactionItem
+                  key={t.id}
+                  transaction={t}
+                  isSettled={settledExpenseIds.has(t.id)}
+                />
               ))}
             </div>
           )}
@@ -805,8 +926,11 @@ export const HomePage: React.FC = () => {
         isOpen={isInvoiceSearchOpen}
         onClose={() => setIsInvoiceSearchOpen(false)}
         activeMember={activeInvoiceMember}
+        members={members}
         groupId={group?.id || ""}
-        initialTransactions={myTransactions}
+        initialTransactions={transactions}
+        initialScope={searchInitialScope}
+        currentMonthKey={currentMonth}
         onEditTransaction={(t) => {
           setIsInvoiceSearchOpen(false);
           navigate("/add", { state: { transaction: t } });

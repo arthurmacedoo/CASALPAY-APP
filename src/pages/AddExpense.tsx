@@ -58,7 +58,18 @@ export const AddExpensePage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const editTransaction = location.state?.transaction as Transaction | undefined;
-  const isEditing = Boolean(editTransaction);
+  const prefillSettlement = location.state?.prefillSettlement as {
+    type: "settlement";
+    settlementMode: "invoice" | "shared";
+    amount?: string;
+    description?: string;
+    fromUserId?: string;
+    toUserId?: string;
+    personalOwnerUserId?: string | null;
+    settledExpenseId?: string | null;
+  } | undefined;
+
+  const isEditing = Boolean(editTransaction && !prefillSettlement);
 
   const monthKey = editTransaction
     ? getMonthKey(editTransaction.date)
@@ -85,8 +96,26 @@ export const AddExpensePage: React.FC = () => {
     return members.find((m) => m.name.toLowerCase().includes(deviceName)) ?? null;
   }, [editTransaction, members]);
 
-  // ─── Inicialização do form (edição ou criação) ───────────────────────────
+  // ─── Inicialização do form (edição, pré-preenchimento ou criação) ───────────
   const [form, setForm] = useState<TransactionFormData>(() => {
+    // 1. Prioridade máxima: quitação rápida pré-preenchida de saldo/fatura/dívida
+    if (prefillSettlement) {
+      const isInvoice = prefillSettlement.settlementMode === "invoice";
+      const ownerUid = prefillSettlement.personalOwnerUserId || prefillSettlement.fromUserId || defaultPayerUid;
+      return {
+        type: "settlement",
+        description: prefillSettlement.description || (isInvoice ? "Pagamento de Fatura" : "Pix de Acerto"),
+        amount: prefillSettlement.amount || "",
+        date: getTodayDateString(),
+        fromUserId: prefillSettlement.fromUserId || defaultPayerUid,
+        toUserId: isInvoice ? ownerUid : (prefillSettlement.toUserId || defaultRecipientUid),
+        isPersonalInvoice: isInvoice,
+        personalOwnerUserId: isInvoice ? ownerUid : null,
+        settledExpenseId: prefillSettlement.settledExpenseId || null,
+      } satisfies SettlementFormData;
+    }
+
+    // 2. Edição de transação existente
     if (editTransaction) {
       const displayAmount =
         editTransaction.type === "expense" && editTransaction.originalAmount
@@ -143,9 +172,24 @@ export const AddExpensePage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
-  // Reset ao navegar para uma nova criação
+  // Reset ou reaplicação de prefill ao navegar
   useEffect(() => {
-    if (!isEditing) {
+    if (prefillSettlement) {
+      const isInvoice = prefillSettlement.settlementMode === "invoice";
+      const ownerUid = prefillSettlement.personalOwnerUserId || prefillSettlement.fromUserId || defaultPayerUid;
+      setForm({
+        type: "settlement",
+        description: prefillSettlement.description || (isInvoice ? "Pagamento de Fatura" : "Pix de Acerto"),
+        amount: prefillSettlement.amount || "",
+        date: getTodayDateString(),
+        fromUserId: prefillSettlement.fromUserId || defaultPayerUid,
+        toUserId: isInvoice ? ownerUid : (prefillSettlement.toUserId || defaultRecipientUid),
+        isPersonalInvoice: isInvoice,
+        personalOwnerUserId: isInvoice ? ownerUid : null,
+        settledExpenseId: prefillSettlement.settledExpenseId || null,
+      });
+      setErrors({});
+    } else if (!isEditing) {
       setForm(makeInitialExpense(defaultPayerUid, memberIds));
       setErrors({});
     }
@@ -179,14 +223,20 @@ export const AddExpensePage: React.FC = () => {
     }
 
     if (form.type === "settlement") {
-      if (!form.toUserId) {
-        newErrors.type = "Selecione o destinatário do Pix";
-      } else if (form.fromUserId === form.toUserId) {
-        newErrors.type = "Remetente e destinatário não podem ser iguais";
+      if (form.isPersonalInvoice) {
+        if (!form.personalOwnerUserId) {
+          newErrors.personalOwnerUserId = "Selecione de quem é a fatura a pagar/abater";
+        }
+      } else {
+        if (!form.toUserId) {
+          newErrors.type = "Selecione o destinatário do Pix";
+        } else if (form.fromUserId === form.toUserId) {
+          newErrors.type = "Remetente e destinatário não podem ser iguais";
+        }
       }
     }
 
-    if (isPersonalSplitForm(form) && !form.personalOwnerUserId) {
+    if (form.type === "expense" && isPersonalSplitForm(form) && !form.personalOwnerUserId) {
       newErrors.personalOwnerUserId =
         "Selecione a quem pertence este gasto pessoal";
     }
@@ -225,6 +275,16 @@ export const AddExpensePage: React.FC = () => {
         };
       }
 
+      // Pagamento de Fatura Individual → garante toUserId coerente com o dono da fatura
+      if (submitData.type === "settlement" && submitData.isPersonalInvoice) {
+        const ownerId = submitData.personalOwnerUserId || submitData.fromUserId || defaultPayerUid;
+        submitData = {
+          ...submitData,
+          personalOwnerUserId: ownerId,
+          toUserId: ownerId,
+        };
+      }
+
       if (isEditing && editTransaction) {
         await updateTransaction(editTransaction, submitData, cents);
       } else {
@@ -233,7 +293,7 @@ export const AddExpensePage: React.FC = () => {
 
       setShowSuccess(true);
 
-      if (!isEditing) {
+      if (!isEditing && !prefillSettlement) {
         setForm(
           form.type === "expense"
             ? makeInitialExpense(defaultPayerUid, memberIds)
@@ -244,6 +304,17 @@ export const AddExpensePage: React.FC = () => {
 
       setTimeout(() => {
         setShowSuccess(false);
+        if (prefillSettlement) {
+          if (submitData.type === "settlement" && submitData.isPersonalInvoice) {
+            const targetOwnerId = submitData.personalOwnerUserId || submitData.fromUserId;
+            sessionStorage.setItem("casalpay_viewMode", "personal");
+            navigate(`/?view=personal&member=${targetOwnerId}`, { replace: true });
+          } else {
+            sessionStorage.setItem("casalpay_viewMode", "shared");
+            navigate("/?view=shared", { replace: true });
+          }
+          return;
+        }
         if (isEditing) {
           if (editTransaction?.status === "pending") {
             if (submitData.type === "expense" && submitData.splitMode === "personal") {
@@ -258,7 +329,7 @@ export const AddExpensePage: React.FC = () => {
             navigate(-1);
           }
         }
-      }, 1200);
+      }, 950);
     } catch (err) {
       console.error("Erro ao salvar:", err);
     } finally {
@@ -272,6 +343,26 @@ export const AddExpensePage: React.FC = () => {
   };
 
   const isExpense = form.type === "expense";
+
+  // Se for saldo anterior gerado automaticamente e estiver tentando editar a despesa, bloqueia
+  if (editTransaction?.carryOver && !prefillSettlement) {
+    return (
+      <main className="flex-1 overflow-y-auto px-6 py-16 flex flex-col items-center justify-center text-center">
+        <div className="w-16 h-16 rounded-3xl bg-amber-400/15 border border-amber-400/30 flex items-center justify-center text-3xl mb-4">
+          ↪
+        </div>
+        <h2 className="text-xl font-bold text-text-primary mb-2">
+          Saldo Anterior Automático
+        </h2>
+        <p className="text-sm text-text-muted max-w-sm mb-6 leading-relaxed">
+          Esta transação foi calculada e transferida automaticamente do fechamento do mês anterior. Ela é somente leitura e é quitada ao realizar um Pix ou compensar despesas normais.
+        </p>
+        <Button onClick={() => navigate("/")} className="w-full max-w-xs">
+          Voltar ao Início
+        </Button>
+      </main>
+    );
+  }
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -643,98 +734,25 @@ export const AddExpensePage: React.FC = () => {
           <>
             <div className="flex flex-col gap-2">
               <p className="text-sm font-medium text-text-secondary">
-                Quem enviou o Pix?
-              </p>
-              <div className="flex gap-2 flex-wrap">
-                {members.map((m) => {
-                  const isSelected = form.fromUserId === m.userId;
-                  return (
-                    <button
-                      key={m.userId}
-                      type="button"
-                      onClick={() => {
-                        setForm((prev) => {
-                          if (prev.type !== "settlement") return prev;
-                          // Regra Crucial: Remetente não pode ser igual a Destinatário.
-                          // Se esse membro já for o destinatário, resetamos o destinatário.
-                          const newToUserId = prev.toUserId === m.userId ? "" : prev.toUserId;
-                          return { 
-                             ...prev, 
-                             fromUserId: m.userId, 
-                             toUserId: newToUserId,
-                             personalOwnerUserId: prev.isPersonalInvoice && newToUserId ? newToUserId : prev.personalOwnerUserId 
-                          };
-                        });
-                      }}
-                      className={`chip transition-all duration-300 ease-in-out ${
-                        isSelected
-                          ? "bg-violet-500/20 border-violet-400 text-violet-300"
-                          : ""
-                      }`}
-                    >
-                      👤 {m.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2 mt-2">
-              <p className="text-sm font-medium text-text-secondary">
-                Quem recebeu o Pix?
-              </p>
-              <div className="flex gap-2 flex-wrap">
-                {members.map((m) => {
-                  const isSelected = form.toUserId === m.userId;
-                  const isDisabled = form.fromUserId === m.userId; // Remetente não pode ser destinatário
-                  return (
-                    <button
-                      key={m.userId}
-                      type="button"
-                      disabled={isDisabled}
-                      onClick={() => {
-                        setForm((prev) =>
-                          prev.type === "settlement"
-                            ? { 
-                                ...prev, 
-                                toUserId: m.userId,
-                                personalOwnerUserId: prev.isPersonalInvoice ? m.userId : prev.personalOwnerUserId
-                              }
-                            : prev
-                        );
-                      }}
-                      className={`chip transition-all duration-300 ease-in-out ${
-                        isSelected
-                          ? "bg-violet-500/20 border-violet-400 text-violet-300"
-                          : isDisabled
-                          ? "opacity-30 cursor-not-allowed border-transparent bg-transparent text-text-muted"
-                          : ""
-                      }`}
-                    >
-                      👤 {m.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium text-text-secondary">
                 Destino do Acerto:
               </p>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() =>
-                    setForm((f) =>
-                      f.type === "settlement"
-                        ? {
-                            ...f,
-                            isPersonalInvoice: false,
-                            personalOwnerUserId: null,
-                          }
-                        : f
-                    )
+                    setForm((f) => {
+                      if (f.type !== "settlement") return f;
+                      const otherMember = members.find((m) => m.userId !== f.fromUserId);
+                      return {
+                        ...f,
+                        isPersonalInvoice: false,
+                        personalOwnerUserId: null,
+                        toUserId:
+                          f.toUserId && f.toUserId !== f.fromUserId
+                            ? f.toUserId
+                            : otherMember?.userId || "",
+                      };
+                    })
                   }
                   className={`chip ${
                     form.type === "settlement" && !form.isPersonalInvoice
@@ -747,15 +765,17 @@ export const AddExpensePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() =>
-                    setForm((f) =>
-                      f.type === "settlement"
-                        ? {
-                            ...f,
-                            isPersonalInvoice: true,
-                            personalOwnerUserId: f.toUserId,
-                          }
-                        : f
-                    )
+                    setForm((f) => {
+                      if (f.type !== "settlement") return f;
+                      const ownerId =
+                        f.personalOwnerUserId || f.fromUserId || user?.uid || "";
+                      return {
+                        ...f,
+                        isPersonalInvoice: true,
+                        personalOwnerUserId: ownerId,
+                        toUserId: ownerId,
+                      };
+                    })
                   }
                   className={`chip ${
                     form.type === "settlement" && form.isPersonalInvoice
@@ -767,6 +787,166 @@ export const AddExpensePage: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            {form.isPersonalInvoice ? (
+              <>
+                <div className="flex flex-col gap-2 mt-2">
+                  <p className="text-sm font-medium text-text-secondary">
+                    De quem é a fatura que está sendo paga?
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    {members.map((m) => {
+                      const isSelected =
+                        (form.personalOwnerUserId || form.toUserId) === m.userId;
+                      return (
+                        <button
+                          key={m.userId}
+                          type="button"
+                          onClick={() => {
+                            setForm((prev) =>
+                              prev.type === "settlement"
+                                ? {
+                                    ...prev,
+                                    personalOwnerUserId: m.userId,
+                                    toUserId: m.userId,
+                                  }
+                                : prev
+                            );
+                          }}
+                          className={`chip transition-all duration-300 ease-in-out ${
+                            isSelected
+                              ? "bg-violet-500/20 border-violet-400 text-violet-300"
+                              : ""
+                          }`}
+                        >
+                          💳 Fatura de {m.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {errors.personalOwnerUserId && (
+                    <p className="text-xs text-accent-red mt-1">
+                      {errors.personalOwnerUserId}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-2 mt-2">
+                  <p className="text-sm font-medium text-text-secondary">
+                    Quem realizou o pagamento?
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    {members.map((m) => {
+                      const isSelected = form.fromUserId === m.userId;
+                      return (
+                        <button
+                          key={m.userId}
+                          type="button"
+                          onClick={() => {
+                            setForm((prev) =>
+                              prev.type === "settlement"
+                                ? {
+                                    ...prev,
+                                    fromUserId: m.userId,
+                                  }
+                                : prev
+                            );
+                          }}
+                          className={`chip transition-all duration-300 ease-in-out ${
+                            isSelected
+                              ? "bg-violet-500/20 border-violet-400 text-violet-300"
+                              : ""
+                          }`}
+                        >
+                          👤 {m.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex flex-col gap-2 mt-2">
+                  <p className="text-sm font-medium text-text-secondary">
+                    Quem enviou o Pix?
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    {members.map((m) => {
+                      const isSelected = form.fromUserId === m.userId;
+                      return (
+                        <button
+                          key={m.userId}
+                          type="button"
+                          onClick={() => {
+                            setForm((prev) => {
+                              if (prev.type !== "settlement") return prev;
+                              const otherMember = members.find(
+                                (mem) => mem.userId !== m.userId
+                              );
+                              const newToUserId =
+                                prev.toUserId === m.userId
+                                  ? otherMember?.userId || ""
+                                  : prev.toUserId;
+                              return {
+                                ...prev,
+                                fromUserId: m.userId,
+                                toUserId: newToUserId,
+                              };
+                            });
+                          }}
+                          className={`chip transition-all duration-300 ease-in-out ${
+                            isSelected
+                              ? "bg-violet-500/20 border-violet-400 text-violet-300"
+                              : ""
+                          }`}
+                        >
+                          👤 {m.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 mt-2">
+                  <p className="text-sm font-medium text-text-secondary">
+                    Quem recebeu o Pix?
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    {members.map((m) => {
+                      const isSelected = form.toUserId === m.userId;
+                      const isDisabled = form.fromUserId === m.userId;
+                      return (
+                        <button
+                          key={m.userId}
+                          type="button"
+                          disabled={isDisabled}
+                          onClick={() => {
+                            setForm((prev) =>
+                              prev.type === "settlement"
+                                ? {
+                                    ...prev,
+                                    toUserId: m.userId,
+                                  }
+                                : prev
+                            );
+                          }}
+                          className={`chip transition-all duration-300 ease-in-out ${
+                            isSelected
+                              ? "bg-violet-500/20 border-violet-400 text-violet-300"
+                              : isDisabled
+                              ? "opacity-30 cursor-not-allowed border-transparent bg-transparent text-text-muted"
+                              : ""
+                          }`}
+                        >
+                          👤 {m.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
           </>
         )}
 

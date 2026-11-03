@@ -122,6 +122,33 @@ export function formatMonthName(monthKey: string): string {
 }
 
 /**
+ * Retorna o monthKey anterior no formato "YYYY-MM"
+ * Ex: "2026-11" -> "2026-10", "2026-01" -> "2025-12"
+ */
+export function getPreviousMonthKey(monthKey: string): string {
+  const [yearStr, monthStr] = monthKey.split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const prevDate = new Date(year, month - 2, 1);
+  const prevYear = prevDate.getFullYear();
+  const prevMonth = String(prevDate.getMonth() + 1).padStart(2, "0");
+  return `${prevYear}-${prevMonth}`;
+}
+
+/**
+ * Normaliza texto para busca insensível a acentos (diacríticos) e caixa alta/baixa.
+ * Ex: "Farmácia São João" -> "farmacia sao joao"
+ */
+export function normalizeSearchText(text: string): string {
+  if (!text) return "";
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+/**
  * Retorna o monthKey atual no formato "YYYY-MM"
  */
 export function getCurrentMonthKey(): string {

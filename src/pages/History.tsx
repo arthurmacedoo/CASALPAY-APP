@@ -5,16 +5,20 @@ import {
   getCurrentMonthKey,
   formatBRL,
   formatMonthLabel,
+  normalizeSearchText,
 } from "../lib/formatters";
 import { TransactionItem } from "../components/TransactionItem";
 import { MonthSelector } from "../components/MonthSelector";
 import type { Transaction } from "../types";
 import { useAuthContext } from "../contexts/AuthContext";
 import { useGroupContext } from "../contexts/GroupContext";
+import { useMonthCarryOver } from "../hooks/useMonthCarryOver";
 import {
   isInvoiceTransactionForMember,
   isSharedTransaction,
   calculatePersonalInvoiceTotal,
+  reconcileCarryOverForDisplay,
+  getSettledExpenseIds,
 } from "../lib/transactionVisibility";
 
 export const HistoryPage: React.FC = () => {
@@ -24,7 +28,7 @@ export const HistoryPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"shared" | "personal">("shared");
   const { user } = useAuthContext();
-  const { members, currentMember } = useGroupContext();
+  const { members, currentMember, group } = useGroupContext();
 
   const [selectedInvoiceMemberUserId, setSelectedInvoiceMemberUserId] = useState<string>(
     user?.uid || ""
@@ -36,33 +40,51 @@ export const HistoryPage: React.FC = () => {
       setSelectedInvoiceMemberUserId(user.uid);
     }
   }, [user?.uid, selectedInvoiceMemberUserId]);
+
   const { transactions, loading, error, deleteTransaction } =
     useTransactions(selectedMonth);
 
+  // Sincroniza saldo anterior se o mês selecionado for o mês atual
+  useMonthCarryOver(group?.id, members, selectedMonth);
+
+  const displayTransactions = useMemo(
+    () => reconcileCarryOverForDisplay(transactions),
+    [transactions]
+  );
+
+  const settledExpenseIds = useMemo(
+    () => getSettledExpenseIds(transactions),
+    [transactions]
+  );
+
   // Passo 3: Arrumar as Abas no Histórico
   const sharedTransactions = useMemo(
-    () => transactions.filter(t => isSharedTransaction(t)),
-    [transactions]
+    () => displayTransactions.filter(t => isSharedTransaction(t)),
+    [displayTransactions]
   );
 
   const selectedMember = useMemo(() => {
     return members.find(m => m.userId === selectedInvoiceMemberUserId) || currentMember;
   }, [members, selectedInvoiceMemberUserId, currentMember]);
 
-  const invoiceTransactions = useMemo(() => {
+  const rawInvoiceTransactions = useMemo(() => {
     return transactions.filter(t => isInvoiceTransactionForMember(t, selectedMember));
   }, [transactions, selectedMember]);
 
+  const invoiceTransactions = useMemo(() => {
+    return displayTransactions.filter(t => isInvoiceTransactionForMember(t, selectedMember));
+  }, [displayTransactions, selectedMember]);
+
   const invoiceTotal = useMemo(
-    () => calculatePersonalInvoiceTotal(invoiceTransactions, selectedMember),
-    [invoiceTransactions, selectedMember]
+    () => calculatePersonalInvoiceTotal(rawInvoiceTransactions, selectedMember),
+    [rawInvoiceTransactions, selectedMember]
   );
 
   const filteredTransactions = useMemo(() => {
     const source = activeTab === "shared" ? sharedTransactions : invoiceTransactions;
     if (!searchTerm.trim()) return source;
-    const lower = searchTerm.toLowerCase();
-    return source.filter(t => t.description.toLowerCase().includes(lower));
+    const termNorm = normalizeSearchText(searchTerm);
+    return source.filter(t => normalizeSearchText(t.description || "").includes(termNorm));
   }, [sharedTransactions, invoiceTransactions, activeTab, searchTerm]);
 
   const handleEdit = (t: Transaction) => {
@@ -181,18 +203,34 @@ export const HistoryPage: React.FC = () => {
             Resumo de {monthLabel}
           </p>
           {activeTab === "shared" ? (
-            <div className="flex gap-4 p-4 border border-border rounded-xl mb-4 bg-bg-elevated animate-fade-in-up">
+            <div className="flex gap-4 p-4 border border-border rounded-xl mb-4 bg-bg-elevated animate-fade-in-up items-center justify-between">
               <div>
-                <p className="text-xs text-text-muted">Despesas ({sharedTransactions.filter(t => t.type === 'expense').length})</p>
-                <p className="font-medium text-text-primary">{formatBRL(sharedTransactions.reduce((acc, t) => acc + (t.amount || 0), 0))}</p>
+                <p className="text-xs text-text-muted">Despesas do Mês ({sharedTransactions.filter(t => t.type === 'expense' && !t.carryOver).length})</p>
+                <p className="font-medium text-text-primary">{formatBRL(sharedTransactions.filter(t => t.type === 'expense' && !t.carryOver).reduce((acc, t) => acc + (t.amount || 0), 0))}</p>
               </div>
+              {sharedTransactions.some(t => t.carryOver) && (
+                <div className="border-l border-border pl-4 text-right">
+                  <p className="text-xs text-amber-400 font-medium">Saldo Anterior</p>
+                  <p className="font-semibold text-amber-300">
+                    {formatBRL(sharedTransactions.filter(t => t.carryOver).reduce((acc, t) => acc + (t.amount || 0), 0))}
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
-            <div className="flex gap-4 p-4 border border-border rounded-xl mb-4 bg-bg-elevated animate-fade-in-up">
+            <div className="flex gap-4 p-4 border border-border rounded-xl mb-4 bg-bg-elevated animate-fade-in-up items-center justify-between">
               <div>
                 <p className="text-xs text-text-muted">Total da Fatura</p>
                 <p className="font-medium text-[#A855F7]">{formatBRL(Math.max(0, invoiceTotal))}</p>
               </div>
+              {invoiceTransactions.some(t => t.carryOver) && (
+                <div className="border-l border-border pl-4 text-right">
+                  <p className="text-xs text-amber-400 font-medium">Saldo Anterior</p>
+                  <p className="font-semibold text-amber-300">
+                    {formatBRL(invoiceTransactions.filter(t => t.carryOver).reduce((acc, t) => acc + (t.amount || 0), 0))}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -240,9 +278,10 @@ export const HistoryPage: React.FC = () => {
               <TransactionItem
                 key={t.id}
                 transaction={t}
-                showActions
-                onEdit={handleEdit}
-                onDelete={handleDelete}
+                isSettled={settledExpenseIds.has(t.id)}
+                showActions={!t.carryOver}
+                onEdit={t.carryOver ? undefined : handleEdit}
+                onDelete={t.carryOver ? undefined : handleDelete}
               />
             ))}
           </div>

@@ -189,9 +189,11 @@ export function useTransactions(monthKey: string): UseTransactionsReturn {
           monthKey: getMonthKey(data.date),
           type: "settlement",
           fromUserId: data.fromUserId,
-          toUserId: data.toUserId,
+          toUserId: data.toUserId || personalOwnerUserId || data.fromUserId,
           visibility,
           personalOwnerUserId: personalOwnerUserId ?? null,
+          settledExpenseId: data.settledExpenseId ?? null,
+          status: "confirmed",
         });
       }
     },

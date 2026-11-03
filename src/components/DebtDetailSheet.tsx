@@ -1,5 +1,6 @@
 import React, { useEffect, useCallback, useState, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import type { DirectDebt, GroupMember } from "../types";
 import { formatBRL, formatDateBR } from "../lib/formatters";
 
@@ -16,6 +17,7 @@ export const DebtDetailSheet: React.FC<DebtDetailSheetProps> = ({
   currentUserId,
   onClose,
 }) => {
+  const navigate = useNavigate();
   const isOpen = debt !== null;
 
   // ── Gesto de deslizar (swipe/pull down to dismiss) ──────────────────────────
@@ -240,43 +242,119 @@ export const DebtDetailSheet: React.FC<DebtDetailSheetProps> = ({
                   Nenhuma despesa direta registrada.
                 </p>
               ) : (
-                debt.sources.map((src, i) => (
-                  <div
-                    key={`${src.expenseId}-${i}`}
-                    className="bg-zinc-800/70 rounded-2xl border border-zinc-700/50 hover:border-zinc-600/80 transition-all overflow-hidden"
-                  >
-                    <div className="flex items-stretch">
-                      <div
-                        className="w-1.5 flex-shrink-0 rounded-l-2xl"
-                        style={{ background: colorHex }}
-                      />
-                      <div className="flex justify-between items-start gap-3 p-3.5 flex-1">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-zinc-100 truncate">
-                            {src.description}
-                          </p>
-                          <p className="text-xs text-zinc-400 mt-0.5">
-                            {formatDateBR(src.date)} · Total {formatBRL(src.totalAmount)}
-                          </p>
-                          <p className="text-xs mt-1">
-                            <span className="text-zinc-500">Pago por </span>
-                            <span className="text-zinc-300 font-semibold">{src.paidByName}</span>
-                            <span className="text-zinc-500"> ({src.splitCount} pessoas)</span>
-                          </p>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-[11px] text-zinc-500 font-medium mb-0.5">sua cota</p>
-                          <p
-                            className="text-base font-bold tabular-nums"
-                            style={{ color: colorHex }}
-                          >
-                            {formatBRL(src.yourShare)}
-                          </p>
+                debt.sources.map((src, i) => {
+                  const handleSettleSource = () => {
+                    if (src.settled) return;
+                    onClose();
+                    const amountStr = (src.yourShare / 100).toFixed(2).replace(".", ",");
+                    const desc = src.carryOver
+                      ? src.description.replace(/^Saldo anterior/i, "Acerto saldo anterior")
+                      : `Acerto · ${src.description}`;
+                    navigate("/add", {
+                      state: {
+                        prefillSettlement: {
+                          type: "settlement",
+                          settlementMode: "shared",
+                          fromUserId: debt.debtorId,
+                          toUserId: debt.creditorId,
+                          amount: amountStr,
+                          description: desc,
+                          settledExpenseId: src.expenseId,
+                        },
+                      },
+                    });
+                  };
+
+                  return (
+                    <div
+                      key={`${src.expenseId}-${i}`}
+                      onClick={!src.settled ? handleSettleSource : undefined}
+                      className={`rounded-2xl border transition-all overflow-hidden ${
+                        src.settled
+                          ? "bg-zinc-900/40 border-zinc-800/60 opacity-60"
+                          : src.carryOver
+                          ? "bg-amber-500/10 border-amber-500/30 hover:border-amber-400/60 cursor-pointer shadow-sm"
+                          : "bg-zinc-800/70 border-zinc-700/50 hover:border-zinc-500/80 cursor-pointer"
+                      }`}
+                    >
+                      <div className="flex items-stretch">
+                        <div
+                          className="w-1.5 flex-shrink-0 rounded-l-2xl"
+                          style={{
+                            background: src.settled
+                              ? "#10B981"
+                              : src.carryOver
+                              ? "#F59E0B"
+                              : colorHex,
+                          }}
+                        />
+                        <div className="flex justify-between items-start gap-3 p-3.5 flex-1">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {src.carryOver && <span className="text-xs text-amber-400">↪</span>}
+                              <p className="text-sm font-bold text-zinc-100 truncate">
+                                {src.description}
+                              </p>
+                            </div>
+                            <p className="text-xs text-zinc-400 mt-0.5">
+                              {formatDateBR(src.date)} · Total {formatBRL(src.totalAmount)}
+                            </p>
+                            <p className="text-xs mt-1">
+                              {src.carryOver ? (
+                                <span className="text-amber-300/90 font-medium text-[11px] bg-amber-400/10 px-2 py-0.5 rounded-md border border-amber-400/20">
+                                  Dívida não quitada do mês anterior
+                                </span>
+                              ) : (
+                                <>
+                                  <span className="text-zinc-500">Pago por </span>
+                                  <span className="text-zinc-300 font-semibold">{src.paidByName}</span>
+                                  <span className="text-zinc-500">
+                                    {" "}
+                                    ({src.splitCount} {src.splitCount === 1 ? "pessoa" : "pessoas"})
+                                  </span>
+                                </>
+                              )}
+                            </p>
+                          </div>
+                          <div className="text-right flex-shrink-0 flex flex-col items-end">
+                            <p className="text-[11px] text-zinc-500 font-medium mb-0.5">
+                              {isDebtor ? "sua cota" : `cota de ${otherName}`}
+                            </p>
+                            <p
+                              className="text-base font-bold tabular-nums"
+                              style={{
+                                color: src.settled
+                                  ? "#10B981"
+                                  : src.carryOver
+                                  ? "#F59E0B"
+                                  : colorHex,
+                              }}
+                            >
+                              {formatBRL(src.yourShare)}
+                            </p>
+                            {src.settled ? (
+                              <span className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-bold text-emerald-400">
+                                ✓ Quitado
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSettleSource();
+                                }}
+                                className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-[11px] font-bold text-emerald-300 active:scale-95 transition-all"
+                              >
+                                <span>💸</span>
+                                <span>{isDebtor ? "Pagar" : "Quitar"}</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </section>
@@ -435,8 +513,40 @@ export const DebtDetailSheet: React.FC<DebtDetailSheetProps> = ({
             </section>
           )}
 
-          {/* ── Botão Fechar no rodapé ───────────────────────────────────────── */}
-          <div className="pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom,16px))]">
+          {/* ── Botão Ação Pix / Fechar no rodapé ───────────────────────────── */}
+          <div className="pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom,16px))] flex flex-col gap-2.5">
+            {debt.amount > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  const amountStr = (debt.amount / 100).toFixed(2).replace(".", ",");
+                  navigate("/add", {
+                    state: {
+                      prefillSettlement: {
+                        type: "settlement",
+                        settlementMode: "shared",
+                        fromUserId: debt.debtorId,
+                        toUserId: debt.creditorId,
+                        amount: amountStr,
+                        description: `Acerto Pix · ${otherName}`,
+                      },
+                    },
+                  });
+                }}
+                className="w-full py-3.5 sm:py-4 rounded-2xl bg-accent-pink hover:bg-accent-pink/90
+                           border border-accent-pink text-sm font-bold text-white flex items-center justify-center gap-2
+                           active:scale-[0.98] transition-all duration-150 shadow-glow"
+              >
+                <span>💸</span>
+                <span>
+                  {isDebtor
+                    ? `Fazer Pix de ${formatBRL(debt.amount)} para ${otherName}`
+                    : `Quitar tudo (${formatBRL(debt.amount)}) de ${otherName}`}
+                </span>
+              </button>
+            )}
+
             <button
               onClick={onClose}
               className="w-full py-3.5 sm:py-4 rounded-2xl bg-zinc-800 hover:bg-zinc-700/90

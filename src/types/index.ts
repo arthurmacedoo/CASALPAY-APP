@@ -107,6 +107,12 @@ export interface ExpenseTransaction {
   // ── Status do ciclo de vida ───────────────────────────────────────────────
   status?: "pending" | "confirmed";
 
+  // ── Lançamento automático de saldo anterior (Carry-over) ───────────────────
+  /** Lançamento automático de saldo pendente do mês anterior (somente leitura) */
+  carryOver?: boolean;
+  /** Mês de origem do saldo ("YYYY-MM") */
+  carryOverFromMonth?: string;
+
   // ── Campos legados (read-only) ────────────────────────────────────────────
   /** @deprecated use paidByUserId */
   paidBy?: LegacyPerson;
@@ -142,6 +148,14 @@ export interface SettlementTransaction {
 
   // ── Status do ciclo de vida ───────────────────────────────────────────────
   status?: "pending" | "confirmed";
+
+  // ── Lançamento automático de saldo anterior (Carry-over) ───────────────────
+  /** Lançamento automático de saldo/crédito pendente do mês anterior (somente leitura) */
+  carryOver?: boolean;
+  /** Mês de origem do saldo ("YYYY-MM") */
+  carryOverFromMonth?: string;
+  /** ID da despesa específica que este Pix/acerto quitou */
+  settledExpenseId?: string | null;
 
   // ── Campos legados (read-only) ────────────────────────────────────────────
   /** @deprecated use fromUserId */
@@ -188,6 +202,8 @@ export interface SettlementFormData {
   isPersonalInvoice: boolean;
   /** UID do dono da fatura (obrigatório quando isPersonalInvoice = true) */
   personalOwnerUserId: string | null;
+  /** ID da despesa específica quitada por este acerto */
+  settledExpenseId?: string | null;
 }
 
 export type TransactionFormData = ExpenseFormData | SettlementFormData;
@@ -219,6 +235,10 @@ export interface DebtSource {
   paidByName:  string;
   /** Quantas pessoas dividiram */
   splitCount:  number;
+  /** Indica se esta despesa de origem é um saldo anterior transferido */
+  carryOver?:  boolean;
+  /** Indica se esta despesa já foi quitada por um acerto no mês */
+  settled?:    boolean;
 }
 
 /**
@@ -231,6 +251,8 @@ export interface DebtSettlement {
   amount:       number;
   /** Data no formato "YYYY-MM-DD" */
   date:         string;
+  /** ID da despesa específica quitada */
+  settledExpenseId?: string | null;
 }
 
 /**

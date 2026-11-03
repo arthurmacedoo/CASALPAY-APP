@@ -4,6 +4,26 @@ Todas as alterações notáveis, correções e novos recursos deste projeto ser�
 
 ---
 
+## [1.5.5] - 2026-11-03
+### ↪️ Rolagem Automática de Saldo (Carry-Over), Quitação Rápida Individual e Busca Unificada
+- **↪️ Rolagem Automática de Saldos Não Quitados entre Meses (`useMonthCarryOver.ts`)**:
+  - Sincronização idempotente e determinística do saldo pendente do mês anterior tanto em **Nossos Gastos** (`carry_{month}_shared_{debtor}_{creditor}`) quanto nas **Faturas Individuais** (`carry_{month}_invoice_{userId}`, suportando saldo devedor e crédito).
+  - Isolamento estatístico (`!t.carryOver`) nas métricas de gastos mensais no Histórico e na Busca para evitar inflar o volume de compras do novo mês.
+- **💸 Quitação Rápida em 1 Clique (Individual, Saldo Anterior e Fatura Própria)**:
+  - **Pagamento da Própria Fatura Desbloqueado (`AddExpense.tsx`)**: Separada a seleção de titular da fatura (`De quem é a fatura que está sendo paga?`) de quem realizou o pagamento, permitindo quitar a própria fatura individual sem bloqueio de remetente/destinatário.
+  - **Quitação Individual por Card (`DebtDetailSheet.tsx` & `TransactionItem.tsx`)**: Adicionado botão `💸 Quitar` / `💸 Pagar` em cada despesa individual e nos cards de resumo (`BalanceCard`, `Total da Minha Fatura`, `Histórico` e `Busca`), preenchendo automaticamente a tela de Pix/Acerto (`prefillSettlement`) com vínculo à despesa quitada (`settledExpenseId`).
+  - **Ocultação Automática após Quitação (`reconcileCarryOverForDisplay` & `reconcileSourcesWithSettlements`)**: Assim que o saldo anterior é pago via Pix/Acerto (total ou parcialmente), o card e o aviso `+ saldo anterior` desaparecem (ou têm o valor abatido) das listagens da Home, Histórico, Busca e Detalhes da Dívida, mantendo o cálculo líquido exato.
+- **🔍 Busca & Histórico Unificado (`InvoiceSearchSheet.tsx`)**:
+  - Seletor de escopo `👫 Nossos Gastos` vs `💳 Fatura Individual` com troca de membro titular.
+  - Alcance de 12 meses em `Todos os Meses` com consulta otimizada no Firestore, normalização de acentos (`normalizeSearchText`) e sincronização instantânea de exclusões em cache.
+- **🎉 Contagem Regressiva de Aniversário Perpétua (`AnniversaryCountdown.tsx`)**:
+  - Cálculo dinâmico a partir de `26/11/2025`, exibindo mensagem comemorativa no dia do aniversário e avançando automaticamente para o próximo ano (`2 ANOS JUNTOS`, `3 ANOS JUNTOS`, etc.) a partir de 27/11.
+- **🐛 Correções de Cálculo e Interface (`calculations.ts` & `TransactionItem.tsx`)**:
+  - Corrigido `calculateExpenseDebt` e criado `resolveExpenseDebtParties` para exibir corretamente a dívida quando uma despesa é 100% do parceiro (`1 pessoa`) em vez de exibir `"Sem dívida"`.
+  - Removido ponto separador órfão (`" · "`) após a data nas listagens de despesas.
+
+---
+
 ## [1.5.2] - 2026-10-07
 ### 👥 Compartilhamento Familiar, Bloqueio Seletivo de Metas e Refinamento de Grupos
 - **🔒 Correção de Convites em Grupos (`firestore.rules`)**:

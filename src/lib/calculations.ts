@@ -133,6 +133,59 @@ interface PairDebtEntry {
 }
 
 /**
+ * Aplica os pagamentos/acertos sobre as fontes de dívida:
+ * 1. Marca como quitadas despesas vinculadas diretamente por `settledExpenseId`.
+ * 2. Com o saldo restante de acertos, abate primeiro o `carryOver` (dívida do mês anterior),
+ *    fazendo o card de Saldo Anterior sumir assim que pago.
+ */
+function reconcileSourcesWithSettlements(
+  sources: DebtSource[],
+  settlements: DebtSettlement[]
+): DebtSource[] {
+  const cloned = sources.map((s) => ({ ...s }));
+  const specificSettledIds = new Set<string>();
+  let genericPool = 0;
+
+  for (const st of settlements) {
+    if (st.settledExpenseId) {
+      const target = cloned.find((s) => s.expenseId === st.settledExpenseId && !s.settled);
+      if (target) {
+        if (st.amount >= target.yourShare) {
+          target.settled = true;
+          specificSettledIds.add(target.expenseId);
+          const leftover = st.amount - target.yourShare;
+          if (leftover > 0) genericPool += leftover;
+        } else {
+          target.yourShare -= st.amount;
+          target.totalAmount = Math.max(target.yourShare, target.totalAmount - st.amount);
+        }
+        continue;
+      }
+    }
+    genericPool += st.amount;
+  }
+
+  // Abate primeiro os saldos anteriores (carryOver) com o pool de pagamentos
+  for (const src of cloned) {
+    if (genericPool <= 0) break;
+    if (src.settled || !src.carryOver) continue;
+
+    if (genericPool >= src.yourShare) {
+      genericPool -= src.yourShare;
+      src.settled = true;
+    } else {
+      src.yourShare -= genericPool;
+      src.totalAmount = src.yourShare;
+      genericPool = 0;
+    }
+  }
+
+  // Saldos anteriores (carryOver) já 100% quitados somem da lista;
+  // despesas normais quitadas permanecem marcadas com settled: true.
+  return cloned.filter((s) => !(s.carryOver && s.settled));
+}
+
+/**
  * Converte o mapa de dívidas brutas por par em array tipado de DirectDebt,
  * fazendo NETTING entre pares opostos e carregando sources + settlements.
  *
@@ -173,7 +226,7 @@ function buildDirectDebts(
         creditorId,
         amount:         net,
         rawAmount:      forwardGross,   // bruto REAL das despesas (sem abatimento)
-        sources:        entry.sources,
+        sources:        reconcileSourcesWithSettlements(entry.sources, entry.settlements),
         settlements:    allSettlements,
         nettingSources: reverseEntry?.sources ?? [],
       });
@@ -183,7 +236,7 @@ function buildDirectDebts(
         creditorId:     debtorId,
         amount:         -net,
         rawAmount:      reverseGross,   // bruto REAL da direção inversa
-        sources:        reverseEntry?.sources ?? [],
+        sources:        reconcileSourcesWithSettlements(reverseEntry?.sources ?? [], reverseEntry?.settlements ?? []),
         settlements:    allSettlements,
         nettingSources: entry.sources,
       });
@@ -288,8 +341,11 @@ export function calculateBalance(
     if (t.visibility === "personal") continue;
     if (t.type !== "expense") continue;
 
-    expenseCount++;
-    totalExpenses += t.amount;
+    // Cuidados extras: despesas de carryOver não inflam o volume de compras do mês atual
+    if (!t.carryOver) {
+      expenseCount++;
+      totalExpenses += t.amount;
+    }
 
     const paidBy    = resolvePaidByUid(t, adminUid, memberUid);
     const splitUids = resolveSplitUids(t, adminUid, memberUid, allMemberUids);
@@ -323,6 +379,7 @@ export function calculateBalance(
           yourShare:   share,
           paidByName,
           splitCount:  splitUids.length,
+          carryOver:   t.carryOver,
         });
       }
     });
@@ -354,9 +411,10 @@ export function calculateBalance(
       pairDebts[key] = { grossTotal: 0, total: 0, sources: [], settlements: [] };
     }
     const settlementEntry: DebtSettlement = {
-      settlementId: t.id,
-      amount:       t.amount,
-      date:         t.date,
+      settlementId:     t.id,
+      amount:           t.amount,
+      date:             t.date,
+      settledExpenseId: t.settledExpenseId ?? null,
     };
     pairDebts[key].total = Math.max(0, pairDebts[key].total - t.amount);
     pairDebts[key].settlements.push(settlementEntry);
@@ -440,16 +498,44 @@ export function getMonthKey(date: string): string {
 
 // ─── Helpers de UI (TransactionItem) ──────────────────────────────────────────
 
-export function calculateExpenseDebt(t: ExpenseTransaction, members: GroupMember[]): number {
+export function resolveExpenseDebtParties(
+  t: ExpenseTransaction,
+  members: GroupMember[]
+): {
+  paidByUid: string | null;
+  debtorUid: string | null;
+  debtAmount: number;
+  splitUids: string[];
+} {
   const adminUid = resolveAdminUid(members);
   const memberUid = resolveMemberUid(members);
-  const allMemberUids = members.map(m => m.userId);
+  const allMemberUids = members.map((m) => m.userId);
+  const paidByUid = resolvePaidByUid(t, adminUid, memberUid);
   const splitUids = resolveSplitUids(t, adminUid, memberUid, allMemberUids);
-  
-  // Se a despesa for dividida entre mais de 1 pessoa, retornamos a cota que cabe a cada "outro" membro.
-  // (Este valor é usado visualmente para mostrar a dívida gerada pela transação).
-  if (splitUids.length <= 1) return 0;
-  return Math.floor(t.amount / splitUids.length);
+
+  if (t.visibility === "personal" || !paidByUid || splitUids.length === 0) {
+    return { paidByUid, debtorUid: null, debtAmount: 0, splitUids };
+  }
+
+  const sharePerMember = Math.floor(t.amount / splitUids.length);
+  const remainder = t.amount % splitUids.length;
+
+  let debtAmount = 0;
+  let debtorUid: string | null = null;
+
+  splitUids.forEach((uid, index) => {
+    const share = index === 0 ? sharePerMember + remainder : sharePerMember;
+    if (uid !== paidByUid) {
+      debtAmount += share;
+      if (!debtorUid) debtorUid = uid;
+    }
+  });
+
+  return { paidByUid, debtorUid, debtAmount, splitUids };
+}
+
+export function calculateExpenseDebt(t: ExpenseTransaction, members: GroupMember[]): number {
+  return resolveExpenseDebtParties(t, members).debtAmount;
 }
 
 export function calculateSettlementEffect(t: SettlementTransaction): number {
