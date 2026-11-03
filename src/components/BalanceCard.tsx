@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import type { BalanceSummary, DirectDebt } from "../types";
 import { formatBRL, formatMonthLabel } from "../lib/formatters";
 import { useGroupContext } from "../contexts/GroupContext";
@@ -18,7 +17,6 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
   onCopyPix,
   copied,
 }) => {
-  const navigate = useNavigate();
   const { directDebts } = balance;
   const { members, currentMember } = useGroupContext();
 
@@ -130,31 +128,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const amountStr = (debt.amount / 100).toFixed(2).replace(".", ",");
-                        const toMemberName = toMember?.name.split(" ")[0] ?? "Membro";
-                        navigate("/add", {
-                          state: {
-                            prefillSettlement: {
-                              type: "settlement",
-                              settlementMode: "shared",
-                              fromUserId: debt.debtorId,
-                              toUserId: debt.creditorId,
-                              amount: amountStr,
-                              description: `Acerto Pix · ${toMemberName}`,
-                            },
-                          },
-                        });
-                      }}
-                      className="px-2.5 py-1 rounded-xl bg-accent-pink/20 hover:bg-accent-pink/35 text-accent-pink text-xs font-bold transition-all active:scale-95 border border-accent-pink/30 shadow-sm"
-                      title="Fazer Pix agora com valor preenchido"
-                    >
-                      Pagar
-                    </button>
+                  <div className="flex items-center gap-1.5">
                     <span className="text-xl font-bold text-accent-pink tabular-nums">
                       {formatBRL(debt.amount)}
                     </span>
@@ -191,31 +165,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const amountStr = (credit.amount / 100).toFixed(2).replace(".", ",");
-                        const fromMemberName = fromMember?.name.split(" ")[0] ?? "Membro";
-                        navigate("/add", {
-                          state: {
-                            prefillSettlement: {
-                              type: "settlement",
-                              settlementMode: "shared",
-                              fromUserId: credit.debtorId,
-                              toUserId: credit.creditorId,
-                              amount: amountStr,
-                              description: `Acerto Pix · ${fromMemberName}`,
-                            },
-                          },
-                        });
-                      }}
-                      className="px-2.5 py-1 rounded-xl bg-accent-blue/20 hover:bg-accent-blue/35 text-accent-blue text-xs font-bold transition-all active:scale-95 border border-accent-blue/30 shadow-sm"
-                      title="Registrar recebimento / dar baixa com valor preenchido"
-                    >
-                      Quitar
-                    </button>
+                  <div className="flex items-center gap-1.5">
                     <span className="text-xl font-bold text-accent-blue tabular-nums">
                       {formatBRL(credit.amount)}
                     </span>

@@ -4,6 +4,12 @@ Todas as alterações notáveis, correções e novos recursos deste projeto ser�
 
 ---
 
+## [1.5.6] - 2026-11-03
+### ✨ Limpeza Visual do Card de Saldo (`BalanceCard.tsx`)
+- **Remoção do botão extra `Quitar` no `BalanceCard`**: Removido o botão embutido nas linhas de resumo do `BalanceCard` (*"Zara te deve"* / *"Você deve a..."*), mantendo o visual limpo e deixando a quitação individual e total concentrada ao tocar para abrir o modal de detalhes (`DebtDetailSheet`) e nos cards de `Saldo anterior`.
+
+---
+
 ## [1.5.5] - 2026-11-03
 ### ↪️ Rolagem Automática de Saldo (Carry-Over), Quitação Rápida Individual e Busca Unificada
 - **↪️ Rolagem Automática de Saldos Não Quitados entre Meses (`useMonthCarryOver.ts`)**:

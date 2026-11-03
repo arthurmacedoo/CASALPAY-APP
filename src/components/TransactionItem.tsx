@@ -41,16 +41,7 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
   const isExpense = transaction.type === "expense";
   const isCarryOver = Boolean(transaction.carryOver);
 
-  const debtParties = isExpense
-    ? resolveExpenseDebtParties(transaction as ExpenseTransaction, members)
-    : { paidByUid: "", debtorUid: "", debtAmount: 0, splitUids: [] };
-
-  const canQuickSettle =
-    isExpense &&
-    transaction.amount > 0 &&
-    (transaction.visibility === "personal" ||
-      isCarryOver ||
-      debtParties.debtAmount > 0);
+  const canQuickSettle = isExpense && isCarryOver && transaction.amount > 0;
 
   const handleQuickSettle = (t: Transaction) => {
     if (t.type !== "expense") return;
